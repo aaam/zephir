@@ -47,7 +47,6 @@ class MinusOperator extends BaseOperator
         $left = $leftExpr->compile($compilationContext);
 
         switch ($left->getType()) {
-
             case 'int':
             case 'uint':
             case 'long':
@@ -57,9 +56,7 @@ class MinusOperator extends BaseOperator
 
             case 'variable':
                 $variable = $compilationContext->symbolTable->getVariable($left->getCode());
-
                 switch ($variable->getType()) {
-
                     case 'int':
                     case 'uint':
                     case 'long':
@@ -69,7 +66,7 @@ class MinusOperator extends BaseOperator
 
                     case 'variable':
                         $compilationContext->headersManager->add('kernel/operators');
-                        $compilationContext->codePrinter->output('zephir_negate(' . $variable->getName() . ' TSRMLS_CC);');
+                        $compilationContext->codePrinter->output('zephir_negate(' . $compilationContext->backend->getVariableCode($variable) . ' TSRMLS_CC);');
                         return new CompiledExpression('variable', $variable->getName(), $expression);
 
                     default:

@@ -38,13 +38,11 @@ class ReturnStatement extends StatementAbstract
      */
     public function compile(CompilationContext $compilationContext)
     {
-
         $statement = $this->_statement;
 
         $codePrinter = $compilationContext->codePrinter;
 
         if (isset($statement['expr'])) {
-
             $currentMethod = $compilationContext->currentMethod;
 
             if ($currentMethod->isConstructor()) {
@@ -62,7 +60,6 @@ class ReturnStatement extends StatementAbstract
                 if ($statement['expr']['left']['type'] == 'variable') {
                     if ($statement['expr']['left']['value'] == 'this') {
                         if ($statement['expr']['right']['type'] == 'variable') {
-
                             /**
                              * If the property is accessed on 'this', we check if the property does exist
                              */
@@ -95,7 +92,6 @@ class ReturnStatement extends StatementAbstract
              */
             if ($currentMethod->hasReturnTypes()) {
                 switch ($resolvedExpr->getType()) {
-
                     case 'null':
                         if (!$currentMethod->areReturnTypesNullCompatible()) {
                             throw new CompilerException("Returning type: " . $resolvedExpr->getType() . " but this type is not compatible with return-type hints declared in the method", $statement['expr']);
@@ -133,7 +129,6 @@ class ReturnStatement extends StatementAbstract
                     case 'variable':
                         $symbolVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $statement['expr']);
                         switch ($symbolVariable->getType()) {
-
                             case 'int':
                             case 'uint':
                             case 'long':
@@ -170,7 +165,6 @@ class ReturnStatement extends StatementAbstract
             }
 
             switch ($resolvedExpr->getType()) {
-
                 case 'null':
                     $codePrinter->output('RETURN_MM_NULL();');
                     break;
@@ -192,7 +186,8 @@ class ReturnStatement extends StatementAbstract
                     break;
 
                 case 'string':
-                    $codePrinter->output('RETURN_MM_STRING("' . Utils::addSlashes($resolvedExpr->getCode()) . '", 1);');
+                case 'istring':
+                    $compilationContext->backend->returnString(Utils::addSlashes($resolvedExpr->getCode()), $compilationContext);
                     break;
 
                 case 'array':
@@ -204,7 +199,6 @@ class ReturnStatement extends StatementAbstract
                     break;
 
                 case 'variable':
-
                     if (!isset($symbolVariable)) {
                         $symbolVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $statement['expr']);
                     }
@@ -247,7 +241,7 @@ class ReturnStatement extends StatementAbstract
                                             }
                                         }
                                     } else {
-                                        $codePrinter->output('RETVAL_ZVAL(' . $symbolVariable->getName() . ', 1, 0);');
+                                        $codePrinter->output('RETVAL_ZVAL(' . $compilationContext->backend->getVariableCode($symbolVariable) . ', 1, 0);');
                                         $codePrinter->output('RETURN_MM();');
                                     }
                                 } else {

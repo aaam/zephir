@@ -33,7 +33,6 @@ use Zephir\Variable;
  */
 class EvalExpression
 {
-
     protected $_unreachable = null;
 
     protected $_unreachableElse = null;
@@ -46,7 +45,7 @@ class EvalExpression
      * @param array $expr
      * @param CompilationContext $compilationContext
      */
-    public function optimizeNot($expr, $compilationContext)
+    public function optimizeNot($expr, CompilationContext $compilationContext)
     {
         /**
          * Compile the expression negating the evaluted expression
@@ -103,10 +102,9 @@ class EvalExpression
         }
 
         /**
-         * Generate the condition according to the value returned by the evaluted expression
+         * Generate the condition according to the value returned by the evaluated expression
          */
         switch ($compiledExpression->getType()) {
-
             case 'null':
                 $this->_unreachable = true;
                 return '0';
@@ -142,24 +140,17 @@ class EvalExpression
                 return $code;
 
             case 'variable':
-
                 $variableRight = $compilationContext->symbolTable->getVariableForRead($compiledExpression->getCode(), $compilationContext, $exprRaw);
-
                 $possibleValue = $variableRight->getPossibleValue();
                 if (is_object($possibleValue)) {
-
                     $possibleValueBranch = $variableRight->getPossibleValueBranch();
                     if ($possibleValueBranch instanceof Branch) {
-
                         /**
                          * Check if the possible value was assigned in the root branch
                          */
                         if ($possibleValueBranch->getType() == Branch::TYPE_ROOT) {
-
                             if ($possibleValue instanceof LiteralCompiledExpression) {
-
                                 switch ($possibleValue->getType()) {
-
                                     case 'null':
                                         $this->_unreachable = true;
                                         break;
@@ -195,7 +186,6 @@ class EvalExpression
                             }
                         }
                     }
-
                 }
 
                 $this->_usedVariables[] = $variableRight->getName();
@@ -204,7 +194,6 @@ class EvalExpression
                  * Evaluate the variable
                  */
                 switch ($variableRight->getType()) {
-
                     case 'int':
                     case 'uint':
                     case 'char':
@@ -214,7 +203,8 @@ class EvalExpression
                         return $variableRight->getName();
 
                     case 'string':
-                        return $variableRight->getName() . ' && Z_STRLEN_P(' . $variableRight->getName() . ')';
+                        $variableRightCode = $compilationContext->backend->getVariableCode($variableRight);
+                        return '!(' . $compilationContext->backend->ifVariableValueUndefined($variableRight, $compilationContext, true, false) . ') && Z_STRLEN_P(' . $variableRightCode . ')';
 
                     case 'bool':
                         return $variableRight->getName();
@@ -224,11 +214,8 @@ class EvalExpression
 
                     case 'variable':
                         $compilationContext->headersManager->add('kernel/operators');
-                        if ($variableRight->isLocalOnly()) {
-                            return 'zephir_is_true(&' . $variableRight->getName() . ')';
-                        } else {
-                            return 'zephir_is_true(' . $variableRight->getName() . ')';
-                        }
+                        $variableRightCode = $compilationContext->backend->getVariableCode($variableRight);
+                        return 'zephir_is_true(' . $variableRightCode . ')';
                         break;
 
                     default:

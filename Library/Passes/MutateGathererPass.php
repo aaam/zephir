@@ -100,7 +100,7 @@ class MutateGathererPass
     /**
      * Pass call expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passCall(array $expression)
     {
@@ -118,7 +118,7 @@ class MutateGathererPass
     /**
      * Pass array expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passArray(array $expression)
     {
@@ -132,7 +132,7 @@ class MutateGathererPass
     /**
      * Pass "new" expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passNew(array $expression)
     {
@@ -148,12 +148,11 @@ class MutateGathererPass
     /**
      * Pass expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passExpression(array $expression)
     {
         switch ($expression['type']) {
-
             case 'bool':
             case 'double':
             case 'int':
@@ -161,6 +160,7 @@ class MutateGathererPass
             case 'long':
             case 'ulong':
             case 'string':
+            case 'istring':
             case 'null':
             case 'char':
             case 'uchar':
@@ -234,7 +234,8 @@ class MutateGathererPass
             case 'clone':
             case 'likely':
             case 'unlikely':
-            case 'ternary': /* do special pass later */
+            case 'ternary':
+                /* do special pass later */
                 $this->passExpression($expression['left']);
                 break;
 
@@ -265,14 +266,12 @@ class MutateGathererPass
     /**
      * Pass statement block
      *
-     * @param array $statement
+     * @param array $statements
      */
     public function passStatementBlock(array $statements)
     {
         foreach ($statements as $statement) {
-
             switch ($statement['type']) {
-
                 case 'let':
                     $this->passLetStatement($statement);
                     break;
@@ -298,6 +297,9 @@ class MutateGathererPass
                     }
                     if (isset($statement['else_statements'])) {
                         $this->passStatementBlock($statement['else_statements']);
+                    }
+                    if (isset($statement['elseif_statements'])) {
+                        $this->passStatementBlock($statement['elseif_statements']);
                     }
                     break;
 
@@ -407,6 +409,7 @@ class MutateGathererPass
                 case 'continue':
                 case 'empty':
                 case 'cblock':
+                case 'comment':
                     break;
 
                 default:

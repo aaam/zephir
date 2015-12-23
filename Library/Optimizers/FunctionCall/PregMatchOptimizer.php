@@ -45,10 +45,6 @@ class PregMatchOptimizer extends OptimizerAbstract
      */
     public function optimize(array $expression, Call $call, CompilationContext $context)
     {
-
-        /** disabled: this optimizer has bugs or its behavior does not match the same as php */
-        return false;
-
         if (!isset($expression['parameters'])) {
             return false;
         }
@@ -98,9 +94,6 @@ class PregMatchOptimizer extends OptimizerAbstract
         if (!$symbolVariable->isVariable()) {
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
 
         $context->headersManager->add('kernel/string');
 
@@ -123,7 +116,12 @@ class PregMatchOptimizer extends OptimizerAbstract
             $offset = '0 ';
         }
 
-        $context->codePrinter->output('zephir_preg_match(' . $symbolVariable->getName() . ', &(' . $symbolVariable->getName() . '), ' . $resolvedParams[0] . ', ' . $resolvedParams[1] . ', ' . $matchesVariable->getName() . ', ' . $this::GLOBAL_MATCH . ', ' . $flags . ', ' . $offset . ' TSRMLS_CC);');
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $matchesSymbol = $context->backend->getVariableCode($matchesVariable);
+        $context->codePrinter->output('zephir_preg_match(' . $symbol . ', ' . $resolvedParams[0] . ', ' . $resolvedParams[1] . ', ' . $matchesSymbol . ', ' . $this::GLOBAL_MATCH . ', ' . $flags . ', ' . $offset . ' TSRMLS_CC);');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

@@ -112,4 +112,35 @@ class ExceptionsTest extends \PHPUnit_Framework_TestCase
         $t = new Exceptions();
         $t->testExceptionLiteral('double');
     }
+
+    /**
+     * @expectedException Exception
+     * @expectedExceptionMessage Hello, Zephir
+     */
+    public function testExceptionSprintf()
+    {
+        $t = new Exceptions();
+        $t->testExceptionSprintf('Zephir');
+    }
+
+    /**
+     * @expectedException Exception
+     * @expectedExceptionMessage Framework Phalcon written using Zephir
+     */
+    public function testExceptionConcat()
+    {
+        $t = new Exceptions();
+        $t->testExceptionConcat('Phalcon', 'Zephir');
+    }
+
+    public function testExceptionRethrow()
+    {
+        $t = new Exceptions();
+        try {
+            $t->testExceptionRethrow();
+            $this->assertFalse();
+        } catch (\Exception $e) {
+            $this->assertEquals(8, $e->getLine());
+        }
+    }
 }

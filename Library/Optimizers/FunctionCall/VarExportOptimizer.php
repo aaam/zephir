@@ -58,9 +58,6 @@ class VarExportOptimizer extends OptimizerAbstract
             if (!$symbolVariable->isVariable()) {
                 throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
             }
-            if ($call->mustInitSymbolVariable()) {
-                $symbolVariable->initVariant($context);
-            }
         }
 
         $context->headersManager->add('kernel/variables');
@@ -68,7 +65,6 @@ class VarExportOptimizer extends OptimizerAbstract
         $resolvedParam = $resolvedParams[0];
 
         if (!$symbolVariable || !$symbolVariable->isVariable()) {
-
             /**
              * Complex expressions require a temporary variable
              */
@@ -105,23 +101,29 @@ class VarExportOptimizer extends OptimizerAbstract
                 )
             ));
             $statement->compile($context);
-
         } else {
             /**
              * This mark the variable as used
              */
             $variable = $context->symbolTable->getVariableForRead($resolvedParam->getCode(), $context, $expression);
         }
+        $variableSymbol = $context->backend->getVariableCodePointer($variable);
 
         /**
          * let a = var_export(val);
          */
         if ($symbolVariable) {
-            $context->codePrinter->output('zephir_var_export_ex(' . $symbolVariable->getName() . ', &(' . $variable->getName() . ') TSRMLS_CC);');
+            if ($symbolVariable->getName() == 'return_value') {
+                $symbolVariable = $context->symbolTable->getTempVariableForWrite('variable', $context);
+            } else {
+                $symbolVariable->initVariant($context);
+            }
+            $symbol = $context->backend->getVariableCode($symbolVariable);
+            $context->codePrinter->output('zephir_var_export_ex(' . $symbol . ', ' . $variableSymbol . ' TSRMLS_CC);');
             return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
         }
 
-        $context->codePrinter->output('zephir_var_export(&' . $variable->getName() . ' TSRMLS_CC);');
+        $context->codePrinter->output('zephir_var_export(' . $variableSymbol . ' TSRMLS_CC);');
         return new CompiledExpression('null', 'null', $expression);
     }
 }

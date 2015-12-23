@@ -21,6 +21,7 @@ namespace Zephir\Passes;
 
 use Zephir\StatementsBlock;
 use Zephir\FunctionCall;
+use Zephir\CompilationContext;
 
 /**
  * CallGathererPass
@@ -34,7 +35,6 @@ use Zephir\FunctionCall;
  */
 class CallGathererPass
 {
-
     protected $functionCalls = array();
 
     protected $methodCalls = array();
@@ -46,7 +46,7 @@ class CallGathererPass
      *
      * @param CompilationContext $compilationContext
      */
-    public function __construct($compilationContext)
+    public function __construct(CompilationContext $compilationContext)
     {
         $this->compilationContext = $compilationContext;
     }
@@ -78,6 +78,16 @@ class CallGathererPass
             return $this->methodCalls[$className][$methodName];
         }
         return 0;
+    }
+
+    /**
+     * Returns all the method calls
+     *
+     * @return int
+     */
+    public function getAllMethodCalls()
+    {
+        return $this->methodCalls;
     }
 
     /**
@@ -117,7 +127,6 @@ class CallGathererPass
 
     public function passNew(array $expression)
     {
-
         if (!$expression['dynamic']) {
             $className = $this->compilationContext->getFullName($expression['class']);
             if (!isset($this->methodCalls[$className]['__construct'])) {
@@ -134,10 +143,18 @@ class CallGathererPass
         }
     }
 
+    public function passNewType(array $expression)
+    {
+        if (isset($expression['parameters'])) {
+            foreach ($expression['parameters'] as $parameter) {
+                $this->passExpression($parameter['parameter']);
+            }
+        }
+    }
+
     public function passExpression(array $expression)
     {
         switch ($expression['type']) {
-
             case 'bool':
             case 'double':
             case 'int':
@@ -148,6 +165,7 @@ class CallGathererPass
             case 'char':
             case 'uchar':
             case 'string':
+            case 'istring':
             case 'static-constant-access':
             case 'variable':
             case 'constant':
@@ -193,10 +211,25 @@ class CallGathererPass
                 break;
 
             case 'not':
+            case 'bitwise_not':
                 $this->passExpression($expression['left']);
                 break;
 
             case 'mcall':
+                if (isset($expression['variable']['value'])) {
+                    if ($expression['variable']['value'] == 'this') {
+                        $methodName = $expression['name'];
+                        $className = $this->compilationContext->classDefinition->getCompleteName();
+                        if (!isset($this->methodCalls[$className][$methodName])) {
+                            $this->methodCalls[$className][$methodName] = 1;
+                        } else {
+                            $this->methodCalls[$className][$methodName]++;
+                        }
+                    }
+                }
+                $this->passCall($expression);
+                break;
+
             case 'scall':
                 $this->passCall($expression);
                 break;
@@ -219,6 +252,10 @@ class CallGathererPass
 
             case 'new':
                 $this->passNew($expression);
+                break;
+
+            case 'new-type':
+                $this->passNewType($expression);
                 break;
 
             case 'property-access':
@@ -272,9 +309,7 @@ class CallGathererPass
     public function passStatementBlock(array $statements)
     {
         foreach ($statements as $statement) {
-
             switch ($statement['type']) {
-
                 case 'let':
                     $this->passLetStatement($statement);
                     break;
@@ -367,7 +402,7 @@ class CallGathererPass
 
                 case 'mcall':
                 case 'scall':
-                    $this->passCall($statement['expr']);
+                    $this->passExpression($statement['expr']);
                     break;
 
                 case 'fcall':
@@ -393,7 +428,9 @@ class CallGathererPass
                 case 'continue':
                 case 'unset':
                 case 'cblock':
-                case 'empty': // empty statement != empty operator
+                case 'comment':
+                // empty statement != empty operator
+                case 'empty':
                     break;
 
                 default:

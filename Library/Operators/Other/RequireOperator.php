@@ -32,29 +32,32 @@ use Zephir\CompiledExpression;
  */
 class RequireOperator extends BaseOperator
 {
-
     /**
-     *
      * @param array $expression
-     * @param \CompilationContext $compilationContext
-     * @return \CompiledExpression
+     * @param CompilationContext $compilationContext
+     * @return CompiledExpression
+     * @throws CompilerException
      */
-    public function compile($expression, CompilationContext $compilationContext)
+    public function compile(array $expression, CompilationContext $compilationContext)
     {
-
         $expr = new Expression($expression['left']);
         $expr->setReadOnly(true);
         $expr->setExpectReturn(true);
 
         $exprPath = $expr->compile($compilationContext);
+        $exprVar = $exprPath->getCode();
         if ($exprPath->getType() == 'variable') {
             $exprVariable = $compilationContext->symbolTable->getVariableForRead($exprPath->getCode(), $compilationContext, $expression);
+            $exprVar = $compilationContext->backend->getVariableCode($exprVariable);
             if ($exprVariable->getType() == 'variable') {
                 if ($exprVariable->hasDifferentDynamicType(array('undefined', 'string'))) {
                     $compilationContext->logger->warning('Possible attempt to use invalid type as path in "require" operator', 'non-valid-require', $expression);
                 }
             }
-
+        } else {
+            $exprVar = $compilationContext->symbolTable->getTempVariableForWrite('variable', $compilationContext, $expression);
+            $compilationContext->backend->assignString($exprVar, $exprPath->getCode(), $compilationContext);
+            $exprVar = $compilationContext->backend->getVariableCode($exprVar);
         }
 
         $symbolVariable = false;
@@ -69,9 +72,10 @@ class RequireOperator extends BaseOperator
 
         if ($symbolVariable) {
             $codePrinter->output('ZEPHIR_OBSERVE_OR_NULLIFY_PPZV(&' . $symbolVariable->getName() . ');');
-            $codePrinter->output('if (zephir_require_zval_ret(&' . $symbolVariable->getName() . ', ' . $exprPath->getCode() . ' TSRMLS_CC) == FAILURE) {');
+            $symbol = $compilationContext->backend->getVariableCodePointer($symbolVariable);
+            $codePrinter->output('if (zephir_require_zval_ret(' . $symbol . ', ' . $exprVar . ' TSRMLS_CC) == FAILURE) {');
         } else {
-            $codePrinter->output('if (zephir_require_zval(' . $exprPath->getCode() . ' TSRMLS_CC) == FAILURE) {');
+            $codePrinter->output('if (zephir_require_zval(' . $exprVar . ' TSRMLS_CC) == FAILURE) {');
         }
         $codePrinter->output("\t" . 'RETURN_MM_NULL();');
         $codePrinter->output('}');

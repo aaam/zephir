@@ -23,7 +23,7 @@ namespace Zephir\Detectors;
  * WriteDetector
  *
  * Detects whether a variable is mutated in a given context
- * If a variable is not modified in a local context (mehtod block) we can avoid allocate
+ * If a variable is not modified in a local context (method block) we can avoid allocate
  * memory for its body (zvalue)
  *
  * Separate parameters to avoid them to be touched by modifying its reference count
@@ -55,16 +55,6 @@ class WriteDetector
     {
         $this->passStatementBlock($statements);
         return $this->getNumberOfMutations($variable) > 0;
-    }
-
-    /**
-     * Do the detection pass on all variables
-     *
-     * @param string $variable
-     */
-    public function detectAll()
-    {
-        $this->passStatementBlock($statements);
     }
 
     /**
@@ -133,7 +123,7 @@ class WriteDetector
     /**
      * Pass call expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passCall(array $expression)
     {
@@ -152,7 +142,7 @@ class WriteDetector
     /**
      * Pass array expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passArray(array $expression)
     {
@@ -169,7 +159,7 @@ class WriteDetector
     /**
      * Pass "new" expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passNew(array $expression)
     {
@@ -213,12 +203,11 @@ class WriteDetector
     /**
      * Pass expressions
      *
-     * @param array $statement
+     * @param array $expression
      */
     public function passExpression(array $expression)
     {
         switch ($expression['type']) {
-
             case 'bool':
             case 'double':
             case 'int':
@@ -279,6 +268,7 @@ class WriteDetector
                 break;
 
             case 'new':
+            case 'new-type':
                 $this->passNew($expression);
                 break;
 
@@ -297,7 +287,8 @@ class WriteDetector
             case 'clone':
             case 'likely':
             case 'unlikely':
-            case 'ternary': /* do special pass later */
+            /* do special pass later */
+            case 'ternary':
                 $this->passExpression($expression['left']);
                 break;
 
@@ -328,14 +319,12 @@ class WriteDetector
     /**
      * Pass statement block
      *
-     * @param array $statement
+     * @param array $statements
      */
     public function passStatementBlock(array $statements)
     {
         foreach ($statements as $statement) {
-
             switch ($statement['type']) {
-
                 case 'let':
                     $this->passLetStatement($statement);
                     break;
@@ -470,6 +459,7 @@ class WriteDetector
                 case 'continue':
                 case 'empty':
                 case 'cblock':
+                case 'comment':
                     break;
 
                 default:

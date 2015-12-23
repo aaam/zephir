@@ -45,18 +45,16 @@ class NotOperator extends BaseOperator
         $left = $leftExpr->compile($compilationContext);
 
         switch ($left->getType()) {
-
             case 'bool':
             case 'int':
             case 'uint':
             case 'long':
             case 'ulong':
-                return new CompiledExpression('bool', '!' . $left->getCode(), $expression);
+                return new CompiledExpression('bool', '!(' . $left->getCode() . ')', $expression);
 
             case 'variable':
                 $variable = $compilationContext->symbolTable->getVariableForRead($left->getCode(), $compilationContext, $expression['left']);
                 switch ($variable->getType()) {
-
                     case 'bool':
                     case 'int':
                     case 'uint':
@@ -65,7 +63,8 @@ class NotOperator extends BaseOperator
 
                     case 'variable':
                         $compilationContext->headersManager->add('kernel/operators');
-                        return new CompiledExpression('bool', '!zephir_is_true(' . $variable->getName() . ')', $expression);
+                        $symbol = $compilationContext->backend->getVariableCode($variable);
+                        return new CompiledExpression('bool', '!zephir_is_true(' . $symbol . ')', $expression);
 
                     default:
                         throw new CompilerException("Unknown type: " . $variable->getType(), $expression);

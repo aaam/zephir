@@ -94,11 +94,9 @@ class PropertyAccess
         $exprVariable = $expr->compile($compilationContext);
 
         switch ($exprVariable->getType()) {
-
             case 'variable':
                 $variableVariable = $compilationContext->symbolTable->getVariableForRead($exprVariable->getCode(), $compilationContext, $expression);
                 switch ($variableVariable->getType()) {
-
                     case 'variable':
                         break;
 
@@ -121,7 +119,6 @@ class PropertyAccess
          * If the property is accessed on 'this', we check if the method does exist
          */
         if ($variableVariable->getRealName() == 'this') {
-
             $classDefinition = $currentClassDefinition;
             if (!$classDefinition->hasProperty($property)) {
                 throw new CompilerException("Class '" . $classDefinition->getCompleteName() . "' does not have a property called: '" . $property . "'", $expression);
@@ -129,18 +126,15 @@ class PropertyAccess
 
             $propertyDefinition = $classDefinition->getProperty($property);
         } else {
-
             /**
              * If we know the class related to a variable we could check if the property
              * is defined on that class
              */
             if ($variableVariable->hasAnyDynamicType('object')) {
-
                 $classType = current($variableVariable->getClassTypes());
                 $compiler = $compilationContext->compiler;
 
                 if ($compiler->isClass($classType)) {
-
                     $classDefinition = $compiler->getClassDefinition($classType);
                     if (!$classDefinition) {
                         throw new CompilerException("Cannot locate class definition for class: " . $classType, $expression);
@@ -160,13 +154,11 @@ class PropertyAccess
          * according to its modifiers
          */
         if ($propertyDefinition) {
-
             if ($propertyDefinition->isStatic()) {
                 throw new CompilerException("Attempt to access static property '" . $property . "' as non static", $expression);
             }
 
             if (!$propertyDefinition->isPublic()) {
-
                 /**
                  * Protected variables only can be read in the class context
                  * where they were declared
@@ -180,7 +172,6 @@ class PropertyAccess
                     }
                 } else {
                     if ($propertyDefinition->isProtected()) {
-
                     } else {
                         if ($propertyDefinition->isPrivate()) {
                             $declarationDefinition = $propertyDefinition->getClassDefinition();
@@ -190,7 +181,6 @@ class PropertyAccess
                         }
                     }
                 }
-
             }
         }
 
@@ -198,95 +188,63 @@ class PropertyAccess
          * Resolves the symbol that expects the value
          */
         $readOnly = false;
-        if ($classDefinition == $currentClassDefinition && $this->_readOnly) {
+        $makeSymbolVariable = false;
+        if ($this->_expecting) {
+            if ($this->_expectingVariable) {
+                $symbolVariable = $this->_expectingVariable;
 
-            if ($this->_expecting) {
-                if ($this->_expectingVariable) {
-
-                    $symbolVariable = $this->_expectingVariable;
-
-                    /**
-                     * If a variable is assigned once in the method, we try to promote it
-                     * to a read only variable
-                     */
-                    if ($symbolVariable->getName() != 'return_value') {
-                        $line = $compilationContext->symbolTable->getLastCallLine();
-                        if ($line === false || ($line > 0 && $line < $expression['line'])) {
-                            $numberMutations = $compilationContext->symbolTable->getExpectedMutations($symbolVariable->getName());
-                            if ($numberMutations == 1) {
-                                if ($symbolVariable->getNumberMutations() == $numberMutations) {
-                                    $symbolVariable->setMemoryTracked(false);
-                                    $readOnly = true;
-                                }
+                /**
+                 * If a variable is assigned once in the method, we try to promote it
+                 * to a read only variable
+                 */
+                if ($symbolVariable->getName() != 'return_value') {
+                    $line = $compilationContext->symbolTable->getLastCallLine();
+                    if ($line === false || ($line > 0 && $line < $expression['line'])) {
+                        $numberMutations = $compilationContext->symbolTable->getExpectedMutations($symbolVariable->getName());
+                        if ($numberMutations == 1) {
+                            if ($symbolVariable->getNumberMutations() == $numberMutations) {
+                                $symbolVariable->setMemoryTracked(false);
+                                $readOnly = true;
                             }
                         }
                     }
-
-                    /**
-                     * Variable is not read only or it wasn't promoted
-                     */
-                    if (!$readOnly) {
-                        if ($symbolVariable->getName() != 'return_value') {
-                            $symbolVariable->observeVariant($compilationContext);
-                            $this->_readOnly = false;
-                        } else {
-                            $symbolVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext);
-                        }
-                    }
-
-                    $this->_readOnly = false;
-                } else {
-                    $symbolVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext);
                 }
+
+                /**
+                 * Variable is not read only or it wasn't promoted
+                 */
+                if (!$readOnly) {
+                    if ($symbolVariable->getName() != 'return_value') {
+                        $symbolVariable->observeVariant($compilationContext);
+                        $this->_readOnly = false;
+                    } else {
+                        $makeSymbolVariable = true;
+                    }
+                }
+
+                $this->_readOnly = false;
             } else {
-                $symbolVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext);
+                $makeSymbolVariable = true;
             }
-
         } else {
-            if ($this->_expecting) {
-                if ($this->_expectingVariable) {
+            $makeSymbolVariable = true;
+        }
 
-                    $symbolVariable = $this->_expectingVariable;
-
-                    /**
-                     * If a variable is assigned once in the method, we try to promote it
-                     * to a read only variable
-                     */
-                    if ($symbolVariable->getName() != 'return_value') {
-                        $line = $compilationContext->symbolTable->getLastCallLine();
-                        if ($line === false || ($line > 0 && $line < $expression['line'])) {
-                            $numberMutations = $compilationContext->symbolTable->getExpectedMutations($symbolVariable->getName());
-                            if ($numberMutations == 1) {
-                                if ($symbolVariable->getNumberMutations() == $numberMutations) {
-                                    $symbolVariable->setMemoryTracked(false);
-                                    $readOnly = true;
-                                }
-                            }
-                        }
-                    }
-
-                    /**
-                     * Variable is not read only or it wasn't promoted
-                     */
-                    if (!$readOnly) {
-                        if ($symbolVariable->getName() != 'return_value') {
-                            $symbolVariable->observeVariant($compilationContext);
-                            $this->_readOnly = false;
-                        } else {
-                            $symbolVariable = $compilationContext->symbolTable->getTempVariableForObserve('variable', $compilationContext, $expression);
-                        }
-                    }
-
-                } else {
-                    $symbolVariable = $compilationContext->symbolTable->getTempVariableForObserve('variable', $compilationContext, $expression);
-                }
+        $readOnly = $this->_readOnly || $readOnly;
+        $useOptimized = $classDefinition == $currentClassDefinition;
+        if (!$compilationContext->backend->isZE3()) {
+            $readOnly = $useOptimized && $readOnly;
+        }
+        if ($makeSymbolVariable) {
+            if ($readOnly) {
+                $symbolVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext);
             } else {
                 $symbolVariable = $compilationContext->symbolTable->getTempVariableForObserve('variable', $compilationContext, $expression);
             }
         }
 
         /**
-         * Variable that receives a property value must be polimorphic
+         * Variable that receives a property value must be polymorphic
          */
         if (!$symbolVariable->isVariable()) {
             throw new CompilerException("Cannot use variable: " . $symbolVariable->getType() . " to assign property value", $expression);
@@ -298,15 +256,9 @@ class PropertyAccess
         $symbolVariable->setDynamicTypes('undefined');
 
         $compilationContext->headersManager->add('kernel/object');
-        if ($classDefinition == $currentClassDefinition) {
-            if ($this->_readOnly || $readOnly) {
-                $codePrinter->output($symbolVariable->getName() . ' = zephir_fetch_nproperty_this(' . $variableVariable->getName() . ', SL("' . $property . '"), PH_NOISY_CC);');
-            } else {
-                $codePrinter->output('zephir_read_property_this(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', SL("' . $property . '"), PH_NOISY_CC);');
-            }
-        } else {
-            $codePrinter->output('zephir_read_property(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', SL("' . $property . '"), PH_NOISY_CC);');
-        }
+
+
+        $compilationContext->backend->fetchProperty($symbolVariable, $variableVariable, $property, $readOnly, $compilationContext, $useOptimized);
 
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }

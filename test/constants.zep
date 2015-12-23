@@ -12,13 +12,21 @@ class Constants extends ConstantsParent
 
 	const C5 = 10.25;
 
+	const C5_SELF = self::C5;
+
+	const C5_BY_NAME = Constants::C5;
+
 	const C6 = "test";
 
-    /**
-     * Test property addSlashes for constants
-     */
-    const ANNOTATION_REGEX = '/@(\w+)(?:\s*(?:\(\s*)?(.*?)(?:\s*\))?)??\s*(?:\n|\*\/)/';
-    const PARAMETER_REGEX = '/(\w+)\s*=\s*(\[[^\]]*\]|"[^"]*"|[^,)]*)\s*(?:,|$)/';
+	const className = __CLASS__;
+
+	const STD_PROP_LIST = \ArrayObject::STD_PROP_LIST;
+
+	/**
+	 * Test property addSlashes for constants
+	 */
+	const ANNOTATION_REGEX = '/@(\w+)(?:\s*(?:\(\s*)?(.*?)(?:\s*\))?)??\s*(?:\n|\*\/)/';
+	const PARAMETER_REGEX = '/(\w+)\s*=\s*(\[[^\]]*\]|"[^"]*"|[^,)]*)\s*(?:,|$)/';
 
 	protected propertyC1 = self::C1 {get};
 	protected propertyC2 = self::C2 {get};
@@ -28,7 +36,7 @@ class Constants extends ConstantsParent
 	protected propertyC6 = self::C6 {get};
 
 	protected propertyC7 = self::ANNOTATION_REGEX {get};
-    protected propertyC8 = self::PARAMETER_REGEX {get};
+	protected propertyC8 = self::PARAMETER_REGEX {get};
 
 	public function testReadConstant()
 	{
@@ -84,7 +92,6 @@ class Constants extends ConstantsParent
 	{
 	    var a;
 	    let a = PHP_VERSION;
-
 	    return a;
 	}
 }

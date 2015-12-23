@@ -32,14 +32,13 @@ use Zephir\CompiledExpression;
  */
 class EmptyOperator extends BaseOperator
 {
-
     /**
-     *
-     * @param array $expression
-     * @param \CompilationContext $compilationContext
-     * @return \CompiledExpression
+     * @param $expression
+     * @param CompilationContext $compilationContext
+     * @return CompiledExpression
+     * @throws CompilerException
      */
-    public function compile($expression, CompilationContext $compilationContext)
+    public function compile(array $expression, CompilationContext $compilationContext)
     {
         $compilationContext->headersManager->add('kernel/operators');
 
@@ -60,6 +59,6 @@ class EmptyOperator extends BaseOperator
             throw new CompilerException("Only dynamic/string variables can be used in 'empty' operators", $expression['left']);
         }
 
-        return new CompiledExpression('bool', 'ZEPHIR_IS_EMPTY(' . $variableLeft->getName() . ')', $expression);
+        return new CompiledExpression('bool', 'ZEPHIR_IS_EMPTY(' . $compilationContext->backend->getVariableCode($variableLeft) . ')', $expression);
     }
 }

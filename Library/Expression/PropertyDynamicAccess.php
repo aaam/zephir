@@ -26,6 +26,7 @@ use Zephir\CompilationContext;
 use Zephir\CompiledExpression;
 use Zephir\CompilerException;
 use Zephir\Expression;
+use Zephir\Utils;
 
 /**
  * PropertyDynamicAccess
@@ -113,22 +114,7 @@ class PropertyDynamicAccess
                 $propertyVariable = $compilationContext->symbolTable->getVariableForRead($propertyAccess['right']['value'], $compilationContext, $expression);
                 break;
             case 'string':
-                $propertyVariable = $compilationContext->symbolTable->getTempVariableForWrite('string', $compilationContext);
-                $statement = new LetStatement(array(
-                    'type' => 'let',
-                    'assignments' => array(
-                        array(
-                            'assign-type' => 'variable',
-                            'variable' => $propertyVariable->getName(),
-                            'operator' => 'assign',
-                            'expr' => $expression['right'],
-                            'file' => $expression['right']['file'],
-                            'line' => $expression['right']['line'],
-                            'char' => $expression['right']['char'],
-                        )
-                    )
-                ));
-                $statement->compile($compilationContext);
+                $propertyVariable = null;
                 break;
             default:
                 throw new CompilerException("Variable type: " . $propertyAccess['right']['type'] . " cannot be used as object", $propertyAccess['left']);
@@ -163,7 +149,10 @@ class PropertyDynamicAccess
         $symbolVariable->setDynamicTypes('undefined');
 
         $compilationContext->headersManager->add('kernel/object');
-        $codePrinter->output('zephir_read_property_zval(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', ' . $propertyVariable->getName() . ', PH_NOISY_CC);');
+
+        $property = $propertyVariable ? $propertyVariable : Utils::addSlashes($expression['right']['value']);
+        $compilationContext->backend->fetchProperty($symbolVariable, $variableVariable, $property, false, $compilationContext, false);
+
 
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }

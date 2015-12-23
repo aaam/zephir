@@ -36,17 +36,17 @@ use Zephir\GlobalConstant;
  */
 class ObjectPropertyArrayIndexAppend extends ArrayIndex
 {
-
     /**
      * Compiles x->y[a][b][] = {expr} (multiple offset assignment)
      *
      * @param string $variable
-     * @param Variable $symbolVariable
+     * @param ZephirVariable $symbolVariable
      * @param CompiledExpression $resolvedExpr
-     * @param CompilationContext $compilationContext,
+     * @param CompilationContext $compilationContext
      * @param array $statement
+     * @throws CompilerException
      */
-    protected function _assignPropertyArrayMultipleIndex($variable, ZephirVariable $symbolVariable, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, $statement)
+    protected function _assignPropertyArrayMultipleIndex($variable, ZephirVariable $symbolVariable, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, array $statement)
     {
         $codePrinter = $compilationContext->codePrinter;
 
@@ -67,7 +67,6 @@ class ObjectPropertyArrayIndexAppend extends ArrayIndex
          */
         $offsetExprs = array();
         foreach ($statement['index-expr'] as $indexExpr) {
-
             $indexExpression = new Expression($indexExpr);
 
             $resolvedIndex = $indexExpression->compile($compilationContext);
@@ -90,7 +89,6 @@ class ObjectPropertyArrayIndexAppend extends ArrayIndex
          * Check if the property to update is defined
          */
         if ($symbolVariable->getRealName() == 'this') {
-
             $classDefinition = $compilationContext->classDefinition;
             if (!$classDefinition->hasProperty($property)) {
                 throw new CompilerException("Class '" . $classDefinition->getCompleteName() . "' does not have a property called: '" . $property . "'", $statement);
@@ -98,18 +96,15 @@ class ObjectPropertyArrayIndexAppend extends ArrayIndex
 
             $propertyDefinition = $classDefinition->getProperty($property);
         } else {
-
             /**
              * If we know the class related to a variable we could check if the property
              * is defined on that class
              */
             if ($symbolVariable->hasAnyDynamicType('object')) {
-
                 $classType = current($symbolVariable->getClassTypes());
                 $compiler = $compilationContext->compiler;
 
                 if ($compiler->isClass($classType)) {
-
                     $classDefinition = $compiler->getClassDefinition($classType);
                     if (!$classDefinition) {
                         throw new CompilerException("Cannot locate class definition for class: " . $classType, $statement);
@@ -122,59 +117,8 @@ class ObjectPropertyArrayIndexAppend extends ArrayIndex
             }
         }
 
-        $keys = '';
-        $numberParams = 0;
-        $offsetItems = array();
-        foreach ($offsetExprs as $offsetExpr) {
-
-            switch ($offsetExpr->getType()) {
-
-                case 'int':
-                case 'uint':
-                case 'long':
-                case 'ulong':
-                    $keys .= 'l';
-                    $offsetItems[] = $offsetExpr->getCode();
-                    $numberParams++;
-                    break;
-
-                case 'string':
-                    $keys .= 's';
-                    $offsetItems[] = 'SL("' . $offsetExpr->getCode() . '")';
-                    $numberParams += 2;
-                    break;
-
-                case 'variable':
-                    $variableIndex = $compilationContext->symbolTable->getVariableForRead($offsetExpr->getCode(), $compilationContext, $statement);
-                    switch ($variableIndex->getType()) {
-
-                        case 'int':
-                        case 'uint':
-                        case 'long':
-                        case 'ulong':
-                            $keys .= 'l';
-                            $offsetItems[] = $variableIndex->getName();
-                            $numberParams++;
-                            break;
-
-                        case 'string':
-                        case 'variable':
-                            $keys .= 'z';
-                            $offsetItems[] = $variableIndex->getName();
-                            $numberParams++;
-                            break;
-
-                        default:
-                            throw new CompilerException("Variable: " . $variableIndex->getType() . " cannot be used as array index", $statement);
-                    }
-                    break;
-
-                default:
-                    throw new CompilerException("Value: " . $offsetExpr->getType() . " cannot be used as array index", $statement);
-            }
-        }
-
-        $codePrinter->output('zephir_update_property_array_multi(' . $symbolVariable->getName() . ', SL("' . $property . '"), &' . $variableExpr->getName() . ' TSRMLS_CC, SL("' . $keys . 'a"), ' . $numberParams . ', ' . join(', ', $offsetItems) . ');');
+        $offsetExprs[] = 'a';
+        $compilationContext->backend->assignPropertyArrayMulti($symbolVariable, $variableExpr, $property, $offsetExprs, $compilationContext);
     }
 
     /**
@@ -188,7 +132,6 @@ class ObjectPropertyArrayIndexAppend extends ArrayIndex
      */
     public function assign($variable, ZephirVariable $symbolVariable, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, $statement)
     {
-
         if (!$symbolVariable->isInitialized()) {
             throw new CompilerException("Cannot mutate variable '" . $variable . "' because it is not initialized", $statement);
         }

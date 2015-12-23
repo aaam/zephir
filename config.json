@@ -3,6 +3,21 @@
         "path": "ide\/%version%\/%namespace%\/",
         "stubs-run-after-generate": false
     },
+
+    "api": {
+        "path"  : "doc/%version%",
+        "theme" : {
+            "name":"zephir",
+            "options" :{
+                "github":"https://github.com/user/repo",
+                "analytics":null,
+                "main_color": "#3E6496",
+                "link_color": "#3E6496",
+                "link_hover_color": "#5F9AE7"
+            }
+        }
+    },
+
     "warnings": {
         "unused-variable": true,
         "unused-variable-external": false,

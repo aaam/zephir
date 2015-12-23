@@ -42,7 +42,7 @@ class GetNsClassOptimizer extends OptimizerAbstract
     public function optimize(array $expression, Call $call, CompilationContext $context)
     {
         if (!isset($expression['parameters'])) {
-                return false;
+            return false;
         }
 
         if (count($expression['parameters']) != 1) {
@@ -59,15 +59,16 @@ class GetNsClassOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/object');
         $symbolVariable->setDynamicTypes('string');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
-        $context->codePrinter->output('zephir_get_ns_class(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ', 0 TSRMLS_CC);');
+
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $context->codePrinter->output('zephir_get_ns_class(' . $symbol . ', ' . $resolvedParams[0] . ', 0 TSRMLS_CC);');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

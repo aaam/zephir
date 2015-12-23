@@ -19,6 +19,8 @@
 
 namespace Zephir;
 
+use Zephir\Expression\Constants;
+
 /**
  * ClassConstant
  *
@@ -28,12 +30,19 @@ class ClassConstant
 {
     protected $name;
 
+    /**
+     * @var array
+     */
     protected $value;
 
     protected $docblock;
 
     /**
      * ClassConstant constructor
+     *
+     * @param $name
+     * @param $value
+     * @param $docBlock
      */
     public function __construct($name, $value, $docBlock)
     {
@@ -65,7 +74,17 @@ class ClassConstant
     }
 
     /**
-     * Get value of constant
+     * Get the type of the value of the constant
+     *
+     * @return string
+     */
+    public function getValueType()
+    {
+        return $this->value['type'];
+    }
+
+    /**
+     * Get value of the value of the constant
      *
      * @return mixed
      */
@@ -99,38 +118,46 @@ class ClassConstant
     }
 
     /**
+     * Process the value of the class constant if needed
+     *
+     * @param compilationContext $compilationContext
+     */
+    public function processValue($compilationContext)
+    {
+        if ($this->value['type'] == 'constant') {
+            $constant = new Constants();
+            $compiledExpression = $constant->compile($this->value, $compilationContext);
+
+            $this->value = array(
+                'type' => $compiledExpression->getType(),
+                'value' => $compiledExpression->getCode()
+            );
+            return;
+        }
+
+        if ($this->value['type'] == 'static-constant-access') {
+            $expression = new Expression($this->value);
+            $compiledExpression = $expression->compile($compilationContext);
+
+            $this->value = array(
+                'type' => $compiledExpression->getType(),
+                'value' => $compiledExpression->getCode()
+            );
+            return;
+        }
+    }
+
+    /**
      * Produce the code to register a class constant
      *
      * @param CompilationContext $compilationContext
+     * @throws CompilerException
+     * @throws Exception
      */
     public function compile(CompilationContext $compilationContext)
     {
+        $this->processValue($compilationContext);
 
-        switch ($this->value['type']) {
-
-            case 'long':
-            case 'int':
-                $compilationContext->codePrinter->output("zend_declare_class_constant_long(" . $compilationContext->classDefinition->getClassEntry($compilationContext) . ", SL(\"" . $this->getName() . "\"), " . $this->value['value'] . " TSRMLS_CC);");
-                break;
-
-            case 'double':
-                $compilationContext->codePrinter->output("zend_declare_class_constant_double(" . $compilationContext->classDefinition->getClassEntry($compilationContext) . ", SL(\"" . $this->getName() . "\"), " . $this->value['value'] . " TSRMLS_CC);");
-                break;
-
-            case 'bool':
-                if ($this->value['value'] == 'false') {
-                    $compilationContext->codePrinter->output("zend_declare_class_constant_bool(" . $compilationContext->classDefinition->getClassEntry($compilationContext) . ", SL(\"" . $this->getName() . "\"), 0 TSRMLS_CC);");
-                } else {
-                    $compilationContext->codePrinter->output("zend_declare_class_constant_bool(" . $compilationContext->classDefinition->getClassEntry($compilationContext) . ", SL(\"" . $this->getName() . "\"), 1 TSRMLS_CC);");
-                }
-                break;
-
-            case 'string':
-                $compilationContext->codePrinter->output("zend_declare_class_constant_string(" . $compilationContext->classDefinition->getClassEntry($compilationContext) . ", SL(\"" . $this->getName() . "\"), \"" . Utils::addSlashes($this->value['value']) . "\" TSRMLS_CC);");
-                break;
-
-            default:
-                $compilationContext->codePrinter->output("zend_declare_class_constant_null(" . $compilationContext->classDefinition->getClassEntry($compilationContext) . ", SL(\"" . $this->getName() . "\") TSRMLS_CC);");
-        }
+        $compilationContext->backend->declareConstant($this->value['type'], $this->getName(), isset($this->value['value']) ? $this->value['value'] : null, $compilationContext);
     }
 }

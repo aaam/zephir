@@ -9,6 +9,11 @@ class Compare
 		return a < b;
 	}
 
+	public function isGreaterEqual(int a, int b)
+	{
+		return a >= b;
+	}
+
 	public function isLessDouble(double a, double b)
 	{
 		return a < b;
@@ -62,5 +67,26 @@ class Compare
 		}
 
 		return false;
+	}
+
+	public function testNotIdenticalZeroVar()
+	{
+		var a = 5;
+
+		return 0 != a;
+	}
+
+	public function testNotIdenticalZeroInt()
+	{
+		int a = 5;
+
+		return 0 != a;
+	}
+
+	public function testNotIdenticalZeroLong()
+	{
+		long a = 5;
+
+		return 0 != a;
 	}
 }

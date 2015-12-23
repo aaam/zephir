@@ -32,7 +32,6 @@ use Zephir\Optimizers\OptimizerAbstract;
  */
 class GetClassLowerOptimizer extends OptimizerAbstract
 {
-
     /**
      * @param array $expression
      * @param Call $call
@@ -61,15 +60,14 @@ class GetClassLowerOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/object');
 
         $symbolVariable->setDynamicTypes('string');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
         $context->codePrinter->output('zephir_get_class(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ', 1 TSRMLS_CC);');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }

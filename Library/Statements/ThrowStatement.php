@@ -63,8 +63,8 @@ class ThrowStatement extends StatementAbstract
                     $this->throwStringException($codePrinter, $class, $message, $statement['expr']);
                     return;
                 } else {
-                    if ($compilationContext->compiler->isInternalClass($className)) {
-                        $classEntry = $compilationContext->classDefinition->getClassEntryByClassName($className, true);
+                    if ($compilationContext->compiler->isBundledClass($className)) {
+                        $classEntry = $compilationContext->classDefinition->getClassEntryByClassName($className, $compilationContext, true);
                         if ($classEntry) {
                             $message = $expr['parameters'][0]['parameter']['value'];
                             $this->throwStringException($codePrinter, $classEntry, $message, $statement['expr']);
@@ -84,21 +84,22 @@ class ThrowStatement extends StatementAbstract
         $throwExpr = new Expression($expr);
         $resolvedExpr = $throwExpr->compile($compilationContext);
 
-        if ($resolvedExpr->getType() != 'variable') {
+        if (!in_array($resolvedExpr->getType(), array('variable', 'string'))) {
             throw new CompilerException("Expression '" . $resolvedExpr->getType() . '" cannot be used as exception', $expr);
         }
 
         $variableVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $expr);
-        if ($variableVariable->getType() != 'variable') {
+        if (!in_array($variableVariable->getType(), array('variable', 'string'))) {
             throw new CompilerException("Variable '" . $variableVariable->getType() . "' cannot be used as exception", $expr);
         }
 
-        $codePrinter->output('zephir_throw_exception_debug(' . $variableVariable->getName() . ', "' . Compiler::getShortUserPath($statement['expr']['file']) . '", ' . $statement['expr']['line'] . ' TSRMLS_CC);');
+        $variableCode = $compilationContext->backend->getVariableCode($variableVariable);
+        $codePrinter->output('zephir_throw_exception_debug(' . $variableCode . ', "' . Compiler::getShortUserPath($statement['expr']['file']) . '", ' . $statement['expr']['line'] . ' TSRMLS_CC);');
         if (!$compilationContext->insideTryCatch) {
             $codePrinter->output('ZEPHIR_MM_RESTORE();');
             $codePrinter->output('return;');
         } else {
-            $codePrinter->output('goto try_end_' . $compilationContext->insideTryCatch . ';');
+            $codePrinter->output('goto try_end_' . $compilationContext->currentTryCatch . ';');
             $codePrinter->outputBlankLine();
         }
 

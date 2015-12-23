@@ -30,7 +30,6 @@ use Zephir\Compiler;
  */
 class CommandVersion extends CommandAbstract
 {
-
     /**
      * Command provided by this command
      *
@@ -58,14 +57,13 @@ class CommandVersion extends CommandAbstract
      */
     public function getDescription()
     {
-        return 'Shows Zephir version';
+        return 'Shows the Zephir version';
     }
 
     /**
      * Executes the command
-     *
-     * Config $config
-     * Logger $logger
+     * @param Config $config
+     * @param Logger $logger
      */
     public function execute(Config $config, Logger $logger)
     {

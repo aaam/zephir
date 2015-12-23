@@ -42,7 +42,6 @@ class UnlikelyOperator extends BaseOperator
      */
     public function compile($expression, CompilationContext $compilationContext)
     {
-
         if (!isset($expression['left'])) {
             throw new CompilerException("Invalid 'left' operand for 'unlikely' expression", $expression['left']);
         }
@@ -61,7 +60,8 @@ class UnlikelyOperator extends BaseOperator
                 case 'bool':
                     return new CompiledExpression('bool', 'unlikely(' . $variable->getName() . ')', $expression);
                 default:
-                    throw new CompilerException("Cannot use expression variable type: '" . $variable->getType() . "' in 'unlikely' operator", $expression['left']);
+                    $symbol = $compilationContext->backend->getVariableCode($variable);
+                    return new CompiledExpression('bool', 'unlikely(zephir_is_true(' . $symbol . '))', $expression);
             }
         }
 

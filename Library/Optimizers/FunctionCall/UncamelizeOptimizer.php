@@ -59,16 +59,16 @@ class UncamelizeOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/string');
 
         $symbolVariable->setDynamicTypes('string');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
-        $context->codePrinter->output('zephir_uncamelize(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ');');
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $context->codePrinter->output('zephir_uncamelize(' . $symbol . ', ' . $resolvedParams[0] . ');');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

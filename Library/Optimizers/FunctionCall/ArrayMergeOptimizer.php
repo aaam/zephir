@@ -59,16 +59,21 @@ class ArrayMergeOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/array');
 
         $symbolVariable->setDynamicTypes('array');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
-        $context->codePrinter->output('zephir_fast_array_merge(' . $symbolVariable->getName() . ', &(' . $resolvedParams[0] . '), &(' . $resolvedParams[1] . ') TSRMLS_CC);');
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $resolveParam = !$context->backend->isZE3() ? function ($str) {
+            return '&(' . $str . ')';
+        } : function ($str) {
+            return $str;
+        };
+        $context->codePrinter->output('zephir_fast_array_merge(' . $symbol . ', ' . $resolveParam($resolvedParams[0]) . ', ' . $resolveParam($resolvedParams[1]) . ' TSRMLS_CC);');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

@@ -27,4 +27,29 @@ class Instanceoff
 		let a = new \stdClass();
 		return a instanceof UnknownClass;
 	}
+
+	public function testInstanceOf4(var a)
+	{
+		if a instanceof \Traversable {
+			return true;
+		}
+
+		return false;
+	}
+
+	public function testInstanceOf5(var a)
+	{
+		if a instanceof this {
+			return true;
+		}
+
+		return false;
+	}
+
+	public function testInstanceOf6()
+	{
+		var a;
+		let a = new static();
+		return a instanceof Instanceoff;
+	}
 }

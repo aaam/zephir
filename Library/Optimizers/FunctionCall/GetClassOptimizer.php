@@ -32,7 +32,6 @@ use Zephir\Optimizers\OptimizerAbstract;
  */
 class GetClassOptimizer extends OptimizerAbstract
 {
-
     /**
      * @param array $expression
      * @param Call $call
@@ -60,17 +59,16 @@ class GetClassOptimizer extends OptimizerAbstract
         if ($symbolVariable->isNotVariableAndString()) {
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
-
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/object');
 
         $symbolVariable->setDynamicTypes('string');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
-        $context->codePrinter->output('zephir_get_class(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ', 0 TSRMLS_CC);');
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $context->codePrinter->output('zephir_get_class(' . $symbol . ', ' . $resolvedParams[0] . ', 0 TSRMLS_CC);');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

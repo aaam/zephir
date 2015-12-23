@@ -602,4 +602,42 @@ class NativeArray
 	{
 	    return !isset(tokens[1]);
 	}
+
+	public function issue743a(array current)
+	{
+		let current[42]["str"] = "ok";
+		return current;
+	}
+
+	public function issue743b(array current)
+	{
+		let current["str"][42] = "ok";
+		return current;
+	}
+
+	public function issue743c(array current)
+	{
+		var key;
+		let key = "hey";
+		let current["str"][$key] = "ok";
+		return current;
+	}
+
+	/**
+	 * @link https://github.com/phalcon/zephir/issues/709
+	 */
+	public function issue709()
+	{
+		var c, arr;
+		var works = true;
+
+		for c in range(0, 50) {
+			let arr = [1, 2];
+			let arr = arr[array_rand(arr)];
+			if arr < 0 || arr > 2 {
+				let works = false;
+			}
+		}
+		return works;
+	}
 }

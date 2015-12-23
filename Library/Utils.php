@@ -42,7 +42,6 @@ class Utils
      *
      * @param string $str
      * @param bool $escapeSlash
-     * @param int $type
      * @return string
      */
     public static function addSlashes($str, $escapeSlash = false)
@@ -52,7 +51,6 @@ class Utils
         $before = null;
         $length = strlen($str);
         for ($i = 0; $i < $length; $i++) {
-
             $ch = substr($str, $i, 1);
             if ($i != ($length -1)) {
                 $after = substr($str, $i + 1, 1);
@@ -152,7 +150,6 @@ class Utils
         }
 
         if ($className[0] !== '\\') {
-
             // If class/interface name not begin with \ maybe a alias or a sub-namespace
             $firstSepPos = strpos($className, '\\');
             if (false !== $firstSepPos) {

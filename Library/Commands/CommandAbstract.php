@@ -19,6 +19,8 @@
 
 namespace Zephir\Commands;
 
+use Zephir\BaseBackend;
+use Zephir\CommandArgumentParser;
 use Zephir\Config;
 use Zephir\Logger;
 use Zephir\Compiler;
@@ -34,7 +36,7 @@ abstract class CommandAbstract implements CommandInterface
 
     /**
      * Returns parameter named $name if specified
-     * on the commmand line else null
+     * on the command line else null
      *
      * @param string $name
      * @param string $value
@@ -50,8 +52,8 @@ abstract class CommandAbstract implements CommandInterface
 
     /**
      * Returns parameter named $name if specified
-     * on the commmand line else null
-     * @param string $parameterName
+     * on the command line else null
+     * @param string $name
      * @return string
      */
     public function getParameter($name)
@@ -59,15 +61,49 @@ abstract class CommandAbstract implements CommandInterface
         return (isset($this->_parameters[$name])) ? $this->_parameters[$name] : null;
     }
 
+
+    /**
+     * Parse the input arguments for the command and returns theme as an associative array
+     * @return array the list of the parameters
+     */
+    public function parseArguments()
+    {
+        if (count($_SERVER['argv']) > 2) {
+            $commandArgs = array_slice($_SERVER['argv'], 2);
+            $parser = new CommandArgumentParser();
+            $params = $parser->parseArgs(array_merge(array("command"), $commandArgs));
+        } else {
+            $params = array();
+        }
+
+        return $params;
+    }
+
     /**
      * Executes the command
-     *
-     * Config $config
-     * Logger $logger
+     * @param Config $config
+     * @param Logger $logger
      */
     public function execute(Config $config, Logger $logger)
     {
-        $compiler = new Compiler($config, $logger);
+        $params = $this->parseArguments();
+        $backend = null;
+        if (!isset($params['backend'])) {
+            $params['backend'] = BaseBackend::getActiveBackend();
+        }
+        $className = 'Zephir\\Backends\\'.$params['backend'].'\\Backend';
+        if (!class_exists($className)) {
+            throw new \InvalidArgumentException('Backend '.$params['backend'].' does not exist');
+        }
+        $backend = new $className();
+        $compiler = new Compiler($config, $logger, $backend);
+        if (isset($params['parser-compiled'])) {
+            if ($params['parser-compiled'] !== 'force') {
+                $compiler->parserCompiled = true;
+            } else {
+                $compiler->parserCompiled = 'force';
+            }
+        }
         $command = $this->getCommand();
         $compiler->$command($this);
     }

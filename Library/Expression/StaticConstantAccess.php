@@ -33,7 +33,6 @@ use Zephir\ClassConstant;
  */
 class StaticConstantAccess
 {
-
     protected $_expecting = true;
 
     protected $_readOnly = false;
@@ -85,7 +84,7 @@ class StaticConstantAccess
             if ($compiler->isClass($className) || $compiler->isInterface($className)) {
                 $classDefinition = $compiler->getClassDefinition($className);
             } else {
-                if ($compiler->isInternalClass($className) || $compiler->isInternalInterface($className)) {
+                if ($compiler->isBundledClass($className) || $compiler->isBundledInterface($className)) {
                     $classDefinition = $compiler->getInternalClassDefinition($className);
                 } else {
                     throw new CompilerException("Cannot locate class '" . $className . "'", $expression['left']);
@@ -119,7 +118,6 @@ class StaticConstantAccess
          * We can optimize the reading of constants by avoiding query their value every time
          */
         if (!$compilationContext->config->get('static-constant-class-folding', 'optimizations')) {
-
             /**
              * Resolves the symbol that expects the value
              */
@@ -135,7 +133,7 @@ class StaticConstantAccess
             }
 
             /**
-             * Variable that receives property accesses must be polimorphic
+             * Variable that receives property accesses must be polymorphic
              */
             if (!$symbolVariable->isVariable()) {
                 throw new CompilerException("Cannot use variable: " . $symbolVariable->getType() . " to assign class constants", $expression);
@@ -151,19 +149,29 @@ class StaticConstantAccess
         $constantDefinition = $classDefinition->getConstant($constant);
 
         if ($constantDefinition instanceof ClassConstant) {
-            $constant = $constantDefinition->getValue();
-            if (isset($constant['value'])) {
-                $value = $constant['value'];
-            } else {
-                $value = null;
-            }
-            $type = $constant['type'];
+            $constantDefinition->processValue($compilationContext);
+            $value = $constantDefinition->getValueValue();
+            $type = $constantDefinition->getValueType();
         } else {
             $value = $constantDefinition;
             $type = gettype($value);
             if ($type == 'integer') {
                 $type = 'int';
             }
+        }
+
+        switch ($type) {
+            case 'string':
+            case 'int':
+            case 'double':
+            case 'float':
+            case 'bool':
+            case 'null':
+                break;
+
+            default:
+                $compilationContext->logger->warning($constantDefinition->getName(), 'nonexistent-constant', $expression);
+                return new CompiledExpression('null', null, $expression);
         }
 
         /**

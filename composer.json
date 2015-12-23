@@ -18,13 +18,14 @@
         "issues": "https://github.com/phalcon/zephir/issues?state=open"
     },
     "require": {
-        "php": "~5.3",
+        "php": ">=5.4",
         "ext-json": "*",
         "ext-hash": "*",
         "ext-ctype": "*"
     },
     "require-dev": {
-        "squizlabs/php_codesniffer": "1.5.2",
+        "squizlabs/php_codesniffer": "~2.3.3",
+        "phpunit/phpunit": "3.7.*",
         "ext-gmp": "*",
         "ext-pdo": "*",
         "ext-pdo_sqlite": "*"
@@ -35,10 +36,6 @@
         }
     },
     "bin": ["bin/zephir"],
-    "scripts": {
-        "post-install-cmd": ["./install"],
-        "post-update-cmd": ["./install"]
-    },
     "extra": {
         "branch-alias": {
             "dev-master": "1.0-dev"

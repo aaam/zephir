@@ -56,7 +56,6 @@ use Zephir\Statements\Let\ExportSymbolString as LetExportSymbolString;
  */
 class LetStatement extends StatementAbstract
 {
-
     /**
      * @param CompilationContext $compilationContext
      * @throws CompilerException
@@ -67,14 +66,12 @@ class LetStatement extends StatementAbstract
 
         $statement = $this->_statement;
         foreach ($statement['assignments'] as $assignment) {
-
             $variable = $assignment['variable'];
 
             /**
              * Get the symbol from the symbol table if necessary
              */
             switch ($assignment['assign-type']) {
-
                 case 'static-property':
                 case 'static-property-append':
                 case 'static-property-array-index':
@@ -89,9 +86,6 @@ class LetStatement extends StatementAbstract
                 case 'array-index-append':
                 case 'string-dynamic-object-property':
                 case 'variable-dynamic-object-property':
-                case 'array-index-append':
-                case 'string-dynamic-object-property':
-                case 'static-property-array-index-append':
                     $symbolVariable = $compilationContext->symbolTable->getVariableForUpdate($variable, $compilationContext, $assignment);
                     break;
 
@@ -104,7 +98,6 @@ class LetStatement extends StatementAbstract
              * Incr/Decr assignments don't require an expression
              */
             if (isset($assignment['expr'])) {
-
                 $expr = new Expression($assignment['expr']);
 
                 switch ($assignment['assign-type']) {
@@ -147,11 +140,14 @@ class LetStatement extends StatementAbstract
                 }
             }
 
+            if ($symbolVariable) {
+                $variable = $symbolVariable->getName();
+            }
+
             /**
              * There are four types of assignments
              */
             switch ($assignment['assign-type']) {
-
                 case 'variable':
                     $let = new LetVariable();
                     $let->assign($variable, $symbolVariable, $resolvedExpr, $readDetector, $compilationContext, $assignment);

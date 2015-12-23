@@ -55,9 +55,6 @@ class JsonEncodeOptimizer extends OptimizerAbstract
         if (!$symbolVariable->isVariable()) {
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
 
         $context->headersManager->add('kernel/string');
 
@@ -73,7 +70,16 @@ class JsonEncodeOptimizer extends OptimizerAbstract
             $options = '0 ';
         }
 
-        $context->codePrinter->output('zephir_json_encode(' . $symbolVariable->getName() . ', &(' . $symbolVariable->getName() . '), ' . $resolvedParams[0] . ', '. $options .' TSRMLS_CC);');
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        if ($context->backend->isZE3()) {
+            $context->codePrinter->output('zephir_json_encode(' . $symbol . ', ' . $resolvedParams[0] . ', '. $options .');');
+        } else {
+            $context->codePrinter->output('zephir_json_encode(' . $symbol . ', &(' . $symbol . '), ' . $resolvedParams[0] . ', '. $options .' TSRMLS_CC);');
+        }
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

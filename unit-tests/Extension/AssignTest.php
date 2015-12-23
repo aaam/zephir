@@ -74,6 +74,7 @@ class AssignTest extends \PHPUnit_Framework_TestCase
         $this->assertTrue($t->testAssign35() === false);
         $this->assertTrue($t->testAssign36() === false);
         $this->assertTrue($t->testAssign37() == $this->getComplexArrayTestValue());
+        $this->assertTrue($t->testAssign38('i') == array('i' => 'val'));
     }
 
     public function testPropertyAssign()
@@ -95,6 +96,7 @@ class AssignTest extends \PHPUnit_Framework_TestCase
         $this->assertTrue($t->testPropertyArray14() == $this->getComplexArrayTestValue());
         $this->assertTrue($t->testStaticPropertyArrayMulti4() == $this->getComplexArrayTestValue());
         $this->assertTrue($t->testStaticPropertyArrayAppend() == array("test", 1, 1.5, false, array()));
+        $this->assertTrue($t->testArrayBoolExpressionAssign() == array("a" => true, "b" => false));
     }
 
     public function testGlobalVarAssign()
@@ -107,5 +109,13 @@ class AssignTest extends \PHPUnit_Framework_TestCase
         assert(!isset($_POST['test_index']));
         $t->testGlobalVarAssign('test_index', 'value');
         assert($_POST['test_index'] == 'value');
+
+        /* Check primitive types */
+        $t->testAssignSuperGlobals();
+        assert($_GET["steststr"] == "stest");
+        assert($_GET["steststr2"] == "stest2");
+        assert($_GET["stestint"] == 1);
+        assert($_GET["stestint2"] == 2);
+        assert($_GET["stest2"] == "testval");
     }
 }

@@ -88,6 +88,13 @@ class CompilationContext
     public $currentMethod;
 
     /**
+     * Methods warm-up
+     *
+     * @var MethodCallWarmUp
+     */
+    public $methodWarmUp;
+
+    /**
      * Represents the c-headers added to the file
      *
      * @var HeadersManager
@@ -136,6 +143,13 @@ class CompilationContext
     public $currentBranch = 0;
 
     /**
+     * Global consecutive for try/catch blocks
+     *
+     * @var int
+     */
+    public $currentTryCatch = 0;
+
+    /**
      * Helps to create graphs of conditional/jump branches in a specific method
      *
      * @var BranchManager
@@ -159,7 +173,7 @@ class CompilationContext
     /**
      * Function Cache
      *
-     * @var FunctionCache
+     * @var Cache\FunctionCache
      */
     public $functionCache;
 
@@ -178,6 +192,13 @@ class CompilationContext
     public $logger;
 
     /**
+     * The current backend
+     *
+     * @var BaseBackend
+     */
+    public $backend;
+
+    /**
      * Transform class/interface name to FQN format
      * @todo WHY WHY :'(
      *
@@ -186,6 +207,10 @@ class CompilationContext
      */
     public function getFullName($className)
     {
-        return Utils::getFullName($className, $this->classDefinition->getNamespace(), $this->aliasManager);
+        $namespace = (isset($this->currentMethod) && $this->currentMethod instanceof FunctionDefinition) ?
+            $this->currentMethod->getNamespace() :
+            $this->classDefinition->getNamespace();
+
+        return Utils::getFullName($className, $namespace, $this->aliasManager);
     }
 }

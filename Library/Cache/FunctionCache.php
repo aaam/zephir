@@ -21,11 +21,12 @@ namespace Zephir\Cache;
 
 use Zephir\Call;
 use Zephir\CompilationContext;
+use Zephir\Passes\CallGathererPass;
 
 /**
  * FunctionCache
  *
- * Calls in Zephir implement monomorphic and polimorphic caches to
+ * Calls in Zephir implement monomorphic and polymorphic caches to
  * improve performance. Method/Functions lookups are cached in a standard
  * first-level method lookup cache.
  *
@@ -52,34 +53,9 @@ class FunctionCache
      *
      * @param CallGathererPass $gatherer
      */
-    public function __construct($gatherer)
+    public function __construct(CallGathererPass $gatherer = null)
     {
         $this->gatherer = $gatherer;
-    }
-
-    /**
-     * Checks if a function can be promoted to a static function call
-     *
-     * @param Call $call
-     * @param string $functionName
-     * @return boolean
-     */
-    public function canBeInternal($call, $functionName)
-    {
-        $reflector = $call->getReflector($functionName);
-        if ($reflector) {
-            if ($reflector->isInternal()) {
-                switch ($reflector->getExtensionName()) {
-                    case 'standard':
-                    case 'Core':
-                    case 'pcre':
-                        return true;
-                    default:
-                        break;
-                }
-            }
-        }
-        return false;
     }
 
     /**
@@ -92,38 +68,38 @@ class FunctionCache
      */
     public function get($functionName, CompilationContext $compilationContext, Call $call, $exists)
     {
-
         if (isset($this->cache[$functionName])) {
-            return '&' . $this->cache[$functionName]->getName();
+            return $this->cache[$functionName] . ', ' . SlotsCache::getExistingFunctionSlot($functionName);
         }
 
         if (!$exists) {
-            return 'NULL';
+            return 'NULL, 0';
         }
 
+        $cacheSlot = SlotsCache::getFunctionSlot($functionName);
+
+        $number = 0;
         if (!$compilationContext->insideCycle) {
-            if (!$this->canBeInternal($call, $functionName)) {
-                $gatherer = $this->gatherer;
-                if ($gatherer) {
-                    $number = $gatherer->getNumberOfFunctionCalls($functionName);
-                    if ($number <= 1) {
-                        return 'NULL';
-                    }
-                } else {
-                    return 'NULL';
+            $gatherer = $this->gatherer;
+            if ($gatherer) {
+                $number = $gatherer->getNumberOfFunctionCalls($functionName);
+                if ($number <= 1) {
+                    return 'NULL, ' . $cacheSlot;
                 }
             }
         }
 
-        if ($this->canBeInternal($call, $functionName)) {
-            $functionCache = $compilationContext->symbolTable->getTempVariableForWrite('static_zephir_fcall_cache_entry', $compilationContext);
+        if ($compilationContext->insideCycle || $number > 1) {
+            $functionCacheVariable = $compilationContext->symbolTable->getTempVariableForWrite('zephir_fcall_cache_entry', $compilationContext);
+            $functionCacheVariable->setMustInitNull(true);
+            $functionCacheVariable->setReusable(false);
+            $functionCache = '&' . $functionCacheVariable->getName();
         } else {
-            $functionCache = $compilationContext->symbolTable->getTempVariableForWrite('zephir_fcall_cache_entry', $compilationContext);
+            $functionCache = 'NULL';
         }
-        $functionCache->setMustInitNull(true);
-        $functionCache->setReusable(false);
+
         $this->cache[$functionName] = $functionCache;
 
-        return '&' . $functionCache->getName();
+        return $functionCache . ', ' . $cacheSlot;
     }
 }

@@ -59,4 +59,25 @@ class Exceptions
                 throw 123.123;
         }
     }
+
+    public function testExceptionSprintf(string name)
+    {
+        throw sprintf("Hello, %s", name);
+    }
+
+    public function testExceptionConcat(string framework, string language)
+    {
+        throw "Framework " . framework . " written using " . language;
+    }
+
+    public function testExceptionRethrow()
+    {
+        var e;
+        try {
+            this->testException1();
+        }
+        catch \Exception, e {
+            throw e;
+        }
+    }
 }

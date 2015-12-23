@@ -45,11 +45,11 @@ class FunctionCall extends Call
      */
     const CALL_DYNAMIC_STRING = 3;
 
-    static protected $_optimizers = array();
+    protected static $_optimizers = array();
 
-    static protected $_functionReflection = array();
+    protected static $_functionReflection = array();
 
-    static protected $_optimizerDirectories = array();
+    protected static $_optimizerDirectories = array();
 
     private static $_functionCache = null;
 
@@ -101,6 +101,7 @@ class FunctionCall extends Call
             case 'min':
             case 'max':
             case 'array_fill':
+            case 'array_pad':
             case 'call_user_func':
             case 'call_user_func_array':
                 return false;
@@ -108,7 +109,6 @@ class FunctionCall extends Call
 
         $reflector = $this->getReflector($funcName);
         if ($reflector) {
-
             if (isset($expression['parameters'])) {
                 /**
                  * Check if the number of parameters
@@ -142,9 +142,10 @@ class FunctionCall extends Call
      * specific parameters to be passed by reference
      *
      * @param string $funcName
-     * @param array $expression
+     * @param array $parameters
      * @param CompilationContext $compilationContext
      * @param array $references
+     * @param array $expression
      * @return boolean
      */
     protected function markReferences($funcName, $parameters, CompilationContext $compilationContext, &$references, $expression)
@@ -162,8 +163,11 @@ class FunctionCall extends Call
                 foreach ($funcParameters as $parameter) {
                     if ($numberParameters >= $n) {
                         if ($parameter->isPassedByReference()) {
-
-                            if (!preg_match('/^[a-zA-Z0-9\_]+$/', $parameters[$n - 1])) {
+                            /* TODO hack, fix this better */
+                            if ($compilationContext->backend->isZE3() && $parameters[$n - 1][0] == '&') {
+                                $parameters[$n - 1] = substr($parameters[$n - 1], 1);
+                            }
+                            if (!preg_match('/^[a-zA-Z0-9$\_]+$/', $parameters[$n - 1])) {
                                 $compilationContext->logger->warning("Cannot mark complex expression as reference", "invalid-reference", $expression);
                                 continue;
                             }
@@ -171,7 +175,7 @@ class FunctionCall extends Call
                             $variable = $compilationContext->symbolTable->getVariable($parameters[$n - 1]);
                             if ($variable) {
                                 $variable->setDynamicTypes('undefined');
-                                $compilationContext->codePrinter->output('Z_SET_ISREF_P(' . $parameters[$n - 1] . ');');
+                                $compilationContext->codePrinter->output('ZEPHIR_MAKE_REF(' . $compilationContext->backend->getVariableCode($variable) . ');');
                                 $references[] = $parameters[$n - 1] ;
                                 return false;
                             }
@@ -199,17 +203,14 @@ class FunctionCall extends Call
          * Check if the optimizer is already cached
          */
         if (!isset(self::$_optimizers[$funcName])) {
-
             $camelizeFunctionName = Utils::camelize($funcName);
 
             /**
              * Check every optimizer directory for an optimizer
              */
             foreach (self::$_optimizerDirectories as $directory) {
-
                 $path =  $directory . DIRECTORY_SEPARATOR . $camelizeFunctionName . 'Optimizer.php';
                 if (file_exists($path)) {
-
                     require_once $path;
 
                     $className = 'Zephir\Optimizers\FunctionCall\\' . $camelizeFunctionName . 'Optimizer';
@@ -225,11 +226,9 @@ class FunctionCall extends Call
 
                     break;
                 }
-
             }
 
             self::$_optimizers[$funcName] = $optimizer;
-
         } else {
             $optimizer = self::$_optimizers[$funcName];
         }
@@ -275,13 +274,23 @@ class FunctionCall extends Call
      * @param string $functionName
      * @return boolean
      */
-    public function functionExists($functionName)
+    public function functionExists($functionName, CompilationContext $context)
     {
         if (function_exists($functionName)) {
             return true;
         }
         if ($this->isBuiltInFunction($functionName)) {
             return true;
+        }
+
+        $internalName = array('f__'.$functionName);
+        if (isset($context->classDefinition)) {
+            $internalName[] = 'f_'.str_replace('\\', '_', strtolower($context->classDefinition->getNamespace())).'_'.$functionName;
+        }
+        foreach ($internalName as $name) {
+            if (isset($context->compiler->functionDefinitions[$name])) {
+                return true;
+            }
         }
         return false;
     }
@@ -290,7 +299,7 @@ class FunctionCall extends Call
      * @param array $expression
      * @param CompilationContext $compilationContext
      */
-    protected function _callNormal(array $expression, $compilationContext)
+    protected function _callNormal(array $expression, CompilationContext $compilationContext)
     {
         $funcName = strtolower($expression['name']);
 
@@ -307,7 +316,7 @@ class FunctionCall extends Call
         }
 
         $exists = true;
-        if (!$this->functionExists($funcName)) {
+        if (!$this->functionExists($funcName, $compilationContext)) {
             $compilationContext->logger->warning("Function \"$funcName\" does not exist at compile time", "nonexistent-function", $expression);
             $exists = false;
         }
@@ -360,6 +369,7 @@ class FunctionCall extends Call
              * We don't know the exact dynamic type returned by the method call
              */
             $symbolVariable->setDynamicTypes('undefined');
+            $symbol = $compilationContext->backend->getVariableCodePointer($symbolVariable);
         }
 
         /**
@@ -392,7 +402,7 @@ class FunctionCall extends Call
                         $symbolVariable->setMustInitNull(true);
                         $symbolVariable->trackVariant($compilationContext);
                     }
-                    $codePrinter->output('ZEPHIR_CALL_FUNCTION(&' . $symbolVariable->getName() . ', "' . $funcName . '", ' . $cachePointer . ');');
+                    $codePrinter->output('ZEPHIR_CALL_FUNCTION(' . $symbol . ', "' . $funcName . '", ' . $cachePointer . ');');
                 }
             } else {
                 $codePrinter->output('ZEPHIR_CALL_FUNCTION(NULL, "' . $funcName . '", ' . $cachePointer . ');');
@@ -406,7 +416,7 @@ class FunctionCall extends Call
                         $symbolVariable->setMustInitNull(true);
                         $symbolVariable->trackVariant($compilationContext);
                     }
-                    $codePrinter->output('ZEPHIR_CALL_FUNCTION(&' . $symbolVariable->getName() . ', "' . $funcName . '", ' . $cachePointer . ', ' . join(', ', $params) . ');');
+                    $codePrinter->output('ZEPHIR_CALL_FUNCTION(' . $symbol . ', "' . $funcName . '", ' . $cachePointer . ', ' . join(', ', $params) . ');');
                 }
             } else {
                 $codePrinter->output('ZEPHIR_CALL_FUNCTION(NULL, "' . $funcName . '", ' . $cachePointer . ', ' . join(', ', $params) . ');');
@@ -422,7 +432,8 @@ class FunctionCall extends Call
 
         if (is_array($references)) {
             foreach ($references as $reference) {
-                $compilationContext->codePrinter->output('Z_UNSET_ISREF_P(' . $reference . ');');
+                $variable = $compilationContext->symbolTable->getVariable($reference, $compilationContext);
+                $compilationContext->codePrinter->output('ZEPHIR_UNREF(' . $compilationContext->backend->getVariableCode($variable) . ');');
             }
         }
 
@@ -447,12 +458,10 @@ class FunctionCall extends Call
      * @param array $expression
      * @param CompilationContext $compilationContext
      */
-    protected function _callDynamic(array $expression, $compilationContext)
+    protected function _callDynamic(array $expression, CompilationContext $compilationContext)
     {
-
         $variable = $compilationContext->symbolTable->getVariableForRead($expression['name'], $compilationContext, $expression);
         switch ($variable->getType()) {
-
             case 'variable':
             case 'string':
                 break;
@@ -510,46 +519,40 @@ class FunctionCall extends Call
 
         if (!isset($expression['parameters'])) {
             if ($this->isExpectingReturn()) {
-                if ($symbolVariable->getName() == 'return_value') {
-                    $codePrinter->output('ZEPHIR_RETURN_CALL_ZVAL_FUNCTION(' . $variable->getName() . ', NULL);');
-                } else {
+                if ($symbolVariable->getName() != 'return_value') {
                     if ($this->mustInitSymbolVariable()) {
                         $symbolVariable->setMustInitNull(true);
                         $symbolVariable->trackVariant($compilationContext);
                     }
-                    $codePrinter->output('ZEPHIR_CALL_ZVAL_FUNCTION(&' . $symbolVariable->getName() . ', ' . $variable->getName() . ', NULL);');
                 }
+                $compilationContext->backend->callDynamicFunction($symbolVariable, $variable, $compilationContext);
             } else {
-                $codePrinter->output('ZEPHIR_CALL_ZVAL_FUNCTION(NULL, ' . $variable->getName() . ', NULL);');
+                $compilationContext->backend->callDynamicFunction(null, $variable, $compilationContext);
             }
         } else {
             if (count($params)) {
                 if ($this->isExpectingReturn()) {
-                    if ($symbolVariable->getName() == 'return_value') {
-                        $codePrinter->output('ZEPHIR_RETURN_CALL_ZVAL_FUNCTION(' . $variable->getName() . ', NULL, ' . join(', ', $params) . ');');
-                    } else {
+                    if ($symbolVariable->getName() != 'return_value') {
                         if ($this->mustInitSymbolVariable()) {
                             $symbolVariable->setMustInitNull(true);
                             $symbolVariable->trackVariant($compilationContext);
                         }
-                        $codePrinter->output('ZEPHIR_CALL_ZVAL_FUNCTION(&' . $symbolVariable->getName() . ', ' . $variable->getName() . ', NULL, ' . join(', ', $params) . ');');
                     }
+                    $compilationContext->backend->callDynamicFunction($symbolVariable, $variable, $compilationContext, $params);
                 } else {
-                    $codePrinter->output('ZEPHIR_CALL_ZVAL_FUNCTION(NULL, ' . $variable->getName() . ', NULL, ' . join(', ', $params) . ');');
+                    $compilationContext->backend->callDynamicFunction(null, $variable, $compilationContext, $params);
                 }
             } else {
                 if ($this->isExpectingReturn()) {
-                    if ($symbolVariable->getName() == 'return_value') {
-                        $codePrinter->output('ZEPHIR_RETURN_CALL_ZVAL_FUNCTION(' . $variable->getName() . ', NULL);');
-                    } else {
+                    if ($symbolVariable->getName() != 'return_value') {
                         if ($this->mustInitSymbolVariable()) {
                             $symbolVariable->setMustInitNull(true);
                             $symbolVariable->trackVariant($compilationContext);
                         }
-                        $codePrinter->output('ZEPHIR_CALL_ZVAL_FUNCTION(&' . $symbolVariable->getName() . ', ' . $variable->getName() . ', NULL);');
                     }
+                    $compilationContext->backend->callDynamicFunction($symbolVariable, $variable, $compilationContext);
                 } else {
-                    $codePrinter->output('ZEPHIR_CALL_ZVAL_FUNCTION(NULL, ' . $variable->getName() . ', NULL);');
+                    $compilationContext->backend->callDynamicFunction(null, $variable, $compilationContext);
                 }
             }
         }
@@ -581,19 +584,18 @@ class FunctionCall extends Call
      * Compiles a function
      *
      * @param Expression $expr
-     * @param CompilationContext $expr
+     * @param CompilationContext $compilationContext
+     * @return CompiledExpression
+     * @throws CompilerException
      */
     public function compile(Expression $expr, CompilationContext $compilationContext)
     {
-
         $this->_expression = $expr;
         $expression = $expr->getExpression();
 
         switch ($expression['call-type']) {
-
             case self::CALL_NORMAL:
                 return $this->_callNormal($expression, $compilationContext);
-
             case self::CALL_DYNAMIC:
                 return $this->_callDynamic($expression, $compilationContext);
         }

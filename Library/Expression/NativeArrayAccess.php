@@ -93,7 +93,6 @@ class NativeArrayAccess
      */
     protected function _accessStringOffset($expression, Variable $variableVariable, CompilationContext $compilationContext)
     {
-
         if ($this->_expecting) {
             if ($this->_expectingVariable) {
                 $symbolVariable = $this->_expectingVariable;
@@ -112,24 +111,23 @@ class NativeArrayAccess
         $exprIndex = $expr->compile($compilationContext);
 
         $codePrinter = $compilationContext->codePrinter;
+        $variableCode = $compilationContext->backend->getVariableCode($variableVariable);
 
         switch ($exprIndex->getType()) {
-
             case 'int':
             case 'uint':
             case 'long':
                 $compilationContext->headersManager->add('kernel/operators');
-                $codePrinter->output($symbolVariable->getName() . ' = ZEPHIR_STRING_OFFSET(' . $variableVariable->getName() . ', ' . $exprIndex->getCode() . ');');
+                $codePrinter->output($symbolVariable->getName() . ' = ZEPHIR_STRING_OFFSET(' . $variableCode . ', ' . $exprIndex->getCode() . ');');
                 break;
 
             case 'variable':
                 $variableIndex = $compilationContext->symbolTable->getVariableForRead($exprIndex->getCode(), $compilationContext, $expression);
                 switch ($variableIndex->getType()) {
-
                     case 'int':
                     case 'uint':
                     case 'long':
-                        $codePrinter->output($symbolVariable->getName() . ' = ZEPHIR_STRING_OFFSET(' . $variableVariable->getName() . ', ' . $variableIndex->getName() . ');');
+                        $codePrinter->output($symbolVariable->getName() . ' = ZEPHIR_STRING_OFFSET(' . $variableCode . ', ' . $variableIndex->getName() . ');');
                         break;
 
                     default:
@@ -154,7 +152,6 @@ class NativeArrayAccess
         $arrayAccess = $expression;
 
         if ($variableVariable->getType() == 'variable') {
-
             if ($variableVariable->hasAnyDynamicType('unknown')) {
                 throw new CompilerException("Cannot use non-initialized variable as an array", $arrayAccess['left']);
             }
@@ -165,7 +162,6 @@ class NativeArrayAccess
             if ($variableVariable->hasDifferentDynamicType(array('undefined', 'array', 'null'))) {
                 $compilationContext->logger->warning('Possible attempt to access array-index on a non-array dynamic variable', 'non-array-access', $arrayAccess['left']);
             }
-
         }
 
         $codePrinter = $compilationContext->codePrinter;
@@ -178,7 +174,6 @@ class NativeArrayAccess
 
         if ($this->_readOnly) {
             if ($this->_expecting && $this->_expectingVariable) {
-
                 /**
                  * If a variable is assigned once in the method, we try to promote it
                  * to a read only variable
@@ -212,7 +207,6 @@ class NativeArrayAccess
             }
         } else {
             if ($this->_expecting && $this->_expectingVariable) {
-
                 /**
                  * If a variable is assigned once in the method, we try to promote it
                  * to a read only variable
@@ -247,7 +241,7 @@ class NativeArrayAccess
         }
 
         /**
-         * Variable that receives property accesses must be polimorphic
+         * Variable that receives property accesses must be polymorphic
          */
         if (!$symbolVariable->isVariable()) {
             throw new CompilerException("Cannot use variable: " . $symbolVariable->getType() . " to assign array index", $expression);
@@ -277,50 +271,11 @@ class NativeArrayAccess
          */
         $expr = new Expression($arrayAccess['right']);
         $exprIndex = $expr->compile($compilationContext);
-
-        switch ($exprIndex->getType()) {
-
-            case 'int':
-            case 'uint':
-            case 'long':
-                $compilationContext->headersManager->add('kernel/array');
-                $codePrinter->output('zephir_array_fetch_long(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', ' . $exprIndex->getCode() . ', ' . $flags . ', "' . Compiler::getShortUserPath($arrayAccess['file']) . '", ' . $arrayAccess['line'] . ' TSRMLS_CC);');
-                break;
-
-            case 'string':
-                $compilationContext->headersManager->add('kernel/array');
-                $codePrinter->output('zephir_array_fetch_string(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', SL("' . $exprIndex->getCode() . '"), ' . $flags . ', "' . Compiler::getShortUserPath($arrayAccess['file']) . '", ' . $arrayAccess['line'] . ' TSRMLS_CC);');
-                break;
-
-            case 'variable':
-                $variableIndex = $compilationContext->symbolTable->getVariableForRead($exprIndex->getCode(), $compilationContext, $expression);
-                switch ($variableIndex->getType()) {
-
-                    case 'int':
-                    case 'uint':
-                    case 'long':
-                        $compilationContext->headersManager->add('kernel/array');
-                        $codePrinter->output('zephir_array_fetch_long(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', ' . $variableIndex->getName() . ', ' . $flags . ', "' . Compiler::getShortUserPath($arrayAccess['file']) . '", ' . $arrayAccess['line'] . ' TSRMLS_CC);');
-                        break;
-
-                    case 'string':
-                    case 'variable':
-                        $compilationContext->headersManager->add('kernel/array');
-                        if ($variableIndex->isLocalOnly()) {
-                            $codePrinter->output('zephir_array_fetch(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', &' . $variableIndex->getName() . ', ' . $flags . ', "' . Compiler::getShortUserPath($arrayAccess['file']) . '", ' . $arrayAccess['line'] . ' TSRMLS_CC);');
-                        } else {
-                            $codePrinter->output('zephir_array_fetch(&' . $symbolVariable->getName() . ', ' . $variableVariable->getName() . ', ' . $variableIndex->getName() . ', ' . $flags . ', "' . Compiler::getShortUserPath($arrayAccess['file']) . '", ' . $arrayAccess['line'] . ' TSRMLS_CC);');
-                        }
-                        break;
-
-                    default:
-                        throw new CompilerException("Variable type: " . $variableIndex->getType() . " cannot be used as array index without cast", $arrayAccess['right']);
-                }
-                break;
-
-            default:
-                throw new CompilerException("Cannot use expression: " . $exprIndex->getType() . " as array index without cast", $arrayAccess['right']);
+        $compilationContext->headersManager->add('kernel/array');
+        if ($exprIndex->getType() == 'variable') {
+            $exprIndex = $compilationContext->symbolTable->getVariableForRead($exprIndex->getCode(), $compilationContext, $expression);
         }
+        $compilationContext->backend->arrayFetch($symbolVariable, $variableVariable, $exprIndex, $flags, $arrayAccess, $compilationContext);
 
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
@@ -347,11 +302,9 @@ class NativeArrayAccess
          * Only dynamic variables can be used as arrays
          */
         switch ($exprVariable->getType()) {
-
             case 'variable':
                 $variableVariable = $compilationContext->symbolTable->getVariableForRead($exprVariable->getCode(), $compilationContext, $expression);
                 switch ($variableVariable->getType()) {
-
                     case 'variable':
                     case 'array':
                     case 'string':
@@ -370,7 +323,6 @@ class NativeArrayAccess
          * Resolve the dimension according to variable's type
          */
         switch ($variableVariable->getType()) {
-
             case 'variable':
                 return $this->_accessDimensionArray($expression, $variableVariable, $compilationContext);
 
@@ -380,6 +332,5 @@ class NativeArrayAccess
             case 'string':
                 return $this->_accessStringOffset($expression, $variableVariable, $compilationContext);
         }
-
     }
 }

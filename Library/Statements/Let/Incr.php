@@ -60,7 +60,6 @@ class Incr
         $codePrinter = &$compilationContext->codePrinter;
 
         switch ($symbolVariable->getType()) {
-
             case 'int':
             case 'uint':
             case 'long':
@@ -80,12 +79,11 @@ class Incr
                 }
 
                 $compilationContext->headersManager->add('kernel/operators');
-                if ($symbolVariable->isLocalOnly()) {
-                    $codePrinter->output('zephir_increment(&' . $variable . ');');
-                } else {
+                if (!$symbolVariable->isLocalOnly()) {
                     $symbolVariable->separate($compilationContext);
-                    $codePrinter->output('zephir_increment(' . $variable . ');');
                 }
+                $symbol = $compilationContext->backend->getVariableCode($symbolVariable);
+                $codePrinter->output('zephir_increment(' . $symbol . ');');
                 break;
 
             default:

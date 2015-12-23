@@ -29,7 +29,6 @@ use Zephir\Logger;
  */
 interface CommandInterface
 {
-
     /**
      * Command provided by this command
      *
@@ -59,9 +58,8 @@ interface CommandInterface
 
     /**
      * Executes the command
-     *
-     * Config $config
-     * Logger $logger
+     * @param Config $config
+     * @param Logger $logger
      */
     public function execute(Config $config, Logger $logger);
 }

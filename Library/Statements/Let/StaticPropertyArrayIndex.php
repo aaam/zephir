@@ -61,7 +61,6 @@ class StaticPropertyArrayIndex extends ArrayIndex
          */
         $offsetExprs = array();
         foreach ($statement['index-expr'] as $indexExpr) {
-
             $indexExpression = new Expression($indexExpr);
 
             $resolvedIndex = $indexExpression->compile($compilationContext);
@@ -80,59 +79,7 @@ class StaticPropertyArrayIndex extends ArrayIndex
             $offsetExprs[] = $resolvedIndex;
         }
 
-        $keys = '';
-        $numberParams = 0;
-        $offsetItems = array();
-        foreach ($offsetExprs as $offsetExpr) {
-
-            switch ($offsetExpr->getType()) {
-
-                case 'int':
-                case 'uint':
-                case 'long':
-                case 'ulong':
-                    $keys .= 'l';
-                    $offsetItems[] = $offsetExpr->getCode();
-                    $numberParams++;
-                    break;
-
-                case 'string':
-                    $keys .= 's';
-                    $offsetItems[] = 'SL("' . $offsetExpr->getCode() . '")';
-                    $numberParams += 2;
-                    break;
-
-                case 'variable':
-                    $variableIndex = $compilationContext->symbolTable->getVariableForRead($offsetExpr->getCode(), $compilationContext, $statement);
-                    switch ($variableIndex->getType()) {
-
-                        case 'int':
-                        case 'uint':
-                        case 'long':
-                        case 'ulong':
-                            $keys .= 'l';
-                            $offsetItems[] = $variableIndex->getName();
-                            $numberParams++;
-                            break;
-
-                        case 'string':
-                        case 'variable':
-                            $keys .= 'z';
-                            $offsetItems[] = $variableIndex->getName();
-                            $numberParams++;
-                            break;
-
-                        default:
-                            throw new CompilerException("Variable: " . $variableIndex->getType() . " cannot be used as array index", $statement);
-                    }
-                    break;
-
-                default:
-                    throw new CompilerException("Value: " . $offsetExpr->getType() . " cannot be used as array index", $statement);
-            }
-        }
-
-        $codePrinter->output('zephir_update_static_property_array_multi_ce(' . $classEntry .', SL("' . $property . '"), &' . $variableExpr->getName() . ' TSRMLS_CC, SL("' . $keys . '"), ' . $numberParams . ', ' . join(', ', $offsetItems) . ');');
+        $compilationContext->backend->assignStaticPropertyArrayMulti($classEntry, $variableExpr, $property, $offsetExprs, $compilationContext);
 
         if ($variableExpr->isTemporal()) {
             $variableExpr->setIdle(true);
@@ -153,14 +100,13 @@ class StaticPropertyArrayIndex extends ArrayIndex
      */
     public function assignStatic($className, $property, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, $statement)
     {
-
         $compiler = $compilationContext->compiler;
         if (!in_array($className, array('self', 'static', 'parent'))) {
             $className = $compilationContext->getFullName($className);
             if ($compiler->isClass($className)) {
                 $classDefinition = $compiler->getClassDefinition($className);
             } else {
-                if ($compiler->isInternalClass($className)) {
+                if ($compiler->isBundledClass($className)) {
                     $classDefinition = $compiler->getInternalClassDefinition($className);
                 } else {
                     throw new CompilerException("Cannot locate class '" . $className . "'", $statement);

@@ -83,7 +83,7 @@ class StaticPropertyAccess
             if ($compiler->isClass($className)) {
                 $classDefinition = $compiler->getClassDefinition($className);
             } else {
-                if ($compiler->isInternalClass($className)) {
+                if ($compiler->isBundledClass($className)) {
                     $classDefinition = $compiler->getInternalClassDefinition($className);
                 } else {
                     throw new CompilerException("Cannot locate class '" . $className . "'", $expression['left']);
@@ -144,7 +144,7 @@ class StaticPropertyAccess
         }
 
         /**
-         * Variable that receives property accesses must be polimorphic
+         * Variable that receives property accesses must be polymorphic
          */
         if (!$symbolVariable->isVariable()) {
             throw new CompilerException("Cannot use variable: " . $symbolVariable->getType() . " to assign class constants", $expression);
@@ -154,21 +154,13 @@ class StaticPropertyAccess
 
         $compilationContext->headersManager->add('kernel/object');
 
-        if ($classDefinition == $compilationContext->classDefinition) {
-            if ($this->_readOnly) {
-                $compilationContext->codePrinter->output($symbolVariable->getName() . ' = zephir_fetch_static_property_ce(' . $classDefinition->getClassEntry() . ', SL("' . $property . '") TSRMLS_CC);');
-            } else {
-                if ($symbolVariable->getName() != 'return_value') {
-                    $symbolVariable->observeVariant($compilationContext);
-                }
-                $compilationContext->codePrinter->output('zephir_read_static_property_ce(&' . $symbolVariable->getName() . ', ' . $classDefinition->getClassEntry() . ', SL("' . $property . '") TSRMLS_CC);');
-            }
-        } else {
+        $readOnly = $this->_readOnly;
+        if (!$readOnly) {
             if ($symbolVariable->getName() != 'return_value') {
                 $symbolVariable->observeVariant($compilationContext);
             }
-            $compilationContext->codePrinter->output('zephir_read_static_property_ce(&' . $symbolVariable->getName() . ', ' . $classDefinition->getClassEntry() . ', SL("' . $property . '") TSRMLS_CC);');
         }
+        $compilationContext->backend->fetchStaticProperty($symbolVariable, $classDefinition, $property, $this->_readOnly, $compilationContext);
 
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }

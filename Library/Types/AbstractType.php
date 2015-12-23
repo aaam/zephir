@@ -22,6 +22,7 @@ namespace Zephir\Types;
 use Zephir\Call;
 use Zephir\CompilationContext;
 use Zephir\Expression;
+use Zephir\Expression\Builder\BuilderFactory;
 use Zephir\CompilerException;
 use Zephir\Builder\FunctionCallBuilder;
 use Zephir\FunctionCall;
@@ -29,14 +30,11 @@ use Zephir\FunctionCall;
 abstract class AbstractType
 {
     /**
+     * The array of methods in zephir mapped to PHP internal methods
+     *
      * @var array
      */
     protected $methodMap = array();
-
-    public function __construct()
-    {
-        $this->methodMap = $this->getMethodMap();
-    }
 
     /**
      * Intercepts calls to built-in methods
@@ -63,7 +61,6 @@ abstract class AbstractType
          * Check the method map
          */
         if (isset($this->methodMap[$methodName])) {
-
             $paramNumber = $this->getNumberParam($methodName);
             if ($paramNumber == 0) {
                 if (isset($expression['parameters'])) {
@@ -87,15 +84,13 @@ abstract class AbstractType
                 }
             }
 
-            $builder = new FunctionCallBuilder(
-                $this->methodMap[$methodName],
-                $parameters,
-                FunctionCall::CALL_NORMAL,
-                $expression['file'],
-                $expression['line'],
-                $expression['char']
-            );
-            $expression = new Expression($builder->get());
+            $functionCall = BuilderFactory::getInstance()->statements()
+                ->functionCall($this->methodMap[$methodName], $parameters)
+                ->setFile($expression['file'])
+                ->setLine($expression['line'])
+                ->setChar($expression['char']);
+
+            $expression = new Expression($functionCall->build());
 
             return $expression->compile($compilationContext);
         }
@@ -104,15 +99,28 @@ abstract class AbstractType
     }
 
     /**
-     * @return string The name of the type
+     * Get the name of the type
+     *
+     * @return string
      */
     abstract public function getTypeName();
 
     /**
-     * @return array The array of methods in zephir mapped to PHP internal methods
+     * Returns the number of the parameter where the object must be bound
+     *
+     * @param $methodName
+     * @return int
      */
-    protected function getMethodMap()
+    protected function getNumberParam($methodName)
     {
-        return array();
+        return 0;
+    }
+
+    /**
+     * @return array
+     */
+    public function getMethodMap()
+    {
+        return $this->methodMap;
     }
 }

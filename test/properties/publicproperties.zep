@@ -50,6 +50,25 @@ class PublicProperties
 	 */
 	public someArray = [1, 2, 3, 4];
 
+	/**
+	 * It's needed to test ide stubs
+	 * @link https://github.com/phalcon/zephir/issues/731
+	 */
+	protected someArrayWithSpecifyKeys = ["a": "A", "b": "B", "c": "C"];
+
+	/**
+	 * It's needed to test ide stubs
+	 * @link https://github.com/phalcon/zephir/issues/731
+	 */
+	protected someArrayWithSubArray = [
+		"success": ["class": "alert alert-success"],
+		"info": ["class": "alert alert-info"],
+		"warning": ["class": "alert alert-warning"],
+		"danger": ["class": "alert alert-danger"]
+	];
+
+	protected someGetterSetterArray = [] { set, get };
+
 	public testPropertyFromSelfConstantValue = self::TEST_CONST;
 
 	public testPropertyFromClassNameConstantValue = PublicProperties::TEST_CONST;

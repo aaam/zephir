@@ -54,17 +54,17 @@ class EvalOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/fcall');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
 
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
         $evalContext = str_replace(ZEPHIRPATH, '', $expression['file'] . ':' . $expression['line']);
+        $symbol = $context->backend->getVariableCode($symbolVariable);
         $context->codePrinter->output(
-            sprintf('zephir_eval_php(%s, %s, "%s" TSRMLS_CC);', $resolvedParams[0], $symbolVariable->getName(), $evalContext)
+            sprintf('zephir_eval_php(%s, %s, "%s" TSRMLS_CC);', $resolvedParams[0], $symbol, $evalContext)
         );
 
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);

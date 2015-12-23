@@ -53,6 +53,6 @@ class CommandStubs extends CommandAbstract
      */
     public function getDescription()
     {
-        return 'Generates stubs';
+        return 'Generates extension PHP stubs';
     }
 }

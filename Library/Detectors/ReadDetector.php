@@ -19,6 +19,8 @@
 
 namespace Zephir\Detectors;
 
+use Zephir\Variable;
+
 /**
  * ReadDetector
  *
@@ -35,6 +37,13 @@ class ReadDetector
             return false;
         }
 
+        /* Remove branch from variable name */
+        $pos = strpos($variable, Variable::BRANCH_MAGIC);
+        if ($pos > -1) {
+            $branchId = intval(substr($variable, $pos + strlen(Variable::BRANCH_MAGIC)));
+            $variable = substr($variable, 0, $pos);
+        }
+
         if ($expression['type'] == 'variable') {
             if ($variable == $expression['value']) {
                 return true;
@@ -44,9 +53,11 @@ class ReadDetector
         if ($expression['type'] == 'fcall' || $expression['type'] == 'mcall' || $expression['type'] == 'scall') {
             if (isset($expression['parameters'])) {
                 foreach ($expression['parameters'] as $parameter) {
-                    if ($parameter['parameter']['type'] == 'variable') {
-                        if ($variable == $parameter['parameter']['value']) {
-                            return true;
+                    if (is_array($parameter['parameter'])) {
+                        if ($parameter['parameter']['type'] == 'variable') {
+                            if ($variable == $parameter['parameter']['value']) {
+                                return true;
+                            }
                         }
                     }
                 }

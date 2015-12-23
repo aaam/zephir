@@ -26,6 +26,7 @@ use Zephir\FunctionCall;
 use Zephir\Optimizers\EvalExpression;
 use Zephir\StatementsBlock;
 use Zephir\Expression;
+use Zephir\Expression\Builder\BuilderFactory;
 use Zephir\Detectors\ForValueUseDetector;
 use Zephir\Variable;
 use Zephir\Utils;
@@ -44,9 +45,8 @@ class ForStatement extends StatementAbstract
      * @param \CompilationContext $compilationContext
      * @return boolean
      */
-    public function compileRange($exprRaw, $compilationContext)
+    public function compileRange($exprRaw, CompilationContext $compilationContext)
     {
-
         if (!count($exprRaw['parameters'])) {
             return false;
         }
@@ -57,6 +57,10 @@ class ForStatement extends StatementAbstract
 
         $functionCall = new FunctionCall();
         $parameters = $functionCall->getResolvedParamsAsExpr($exprRaw['parameters'], $compilationContext, $exprRaw);
+
+        if (count($parameters) != 2 && count($parameters) != 3) {
+            throw new CompilerException("Wrong number of parameters", $this->_statement['expr']);
+        }
 
         if ($parameters[0]->getType() != 'variable') {
             if (!$parameters[0]->isIntCompatibleType()) {
@@ -71,12 +75,12 @@ class ForStatement extends StatementAbstract
         }
 
         $codePrinter = $compilationContext->codePrinter;
+        $exprBuilder = BuilderFactory::getInstance();
 
         /**
          * Initialize 'key' variable
          */
         if (isset($this->_statement['key'])) {
-
             /**
              * This variable is used to check if the loop is in its first iteration
              */
@@ -110,79 +114,48 @@ class ForStatement extends StatementAbstract
         /**
          * Create an implicit 'let' operation to set the current value in the upper bound of the range
          */
-        $statement = new LetStatement(array(
-            'type' => 'let',
-            'assignments' => array(
-                array(
-                    'assign-type' => 'variable',
-                    'variable' => $upperBoundVariable->getName(),
-                    'operator' => 'assign',
-                    'expr' => array(
-                        'type' => $parameters[1]->getType(),
-                        'value' => $parameters[1]->getCode(),
-                        'file' => $this->_statement['file'],
-                        'line' => $this->_statement['line'],
-                        'char' => $this->_statement['char']
-                    ),
-                    'file' => $this->_statement['file'],
-                    'line' => $this->_statement['line'],
-                    'char' => $this->_statement['char']
-                )
-            )
+        $builderLet = $exprBuilder->statements()->let();
+        $builderLet->setAssignments(array($exprBuilder->operators()
+            ->assignVariable($upperBoundVariable->getName(), $exprBuilder->literal($parameters[1]->getType(), $parameters[1]->getCode())
+                ->setFile($this->_statement['file'])
+                ->setLine($this->_statement['line'])
+                ->setChar($this->_statement['char']))
+            ->setFile($this->_statement['file'])
+            ->setLine($this->_statement['line'])
+            ->setChar($this->_statement['char'])
         ));
+
+        $statement = new LetStatement($builderLet->build());
         $statement->compile($compilationContext);
 
         if ($this->_statement['reverse']) {
-
             /**
-             * Create an implicit 'let' operation for the initialize expression, @TODO use a builder
+             * Create an implicit 'let' operation for the initialize expression
              */
-            $statement = new LetStatement(array(
-                'type' => 'let',
-                'assignments' => array(
-                    array(
-                        'assign-type' => 'variable',
-                        'variable' => $tempVariable->getName(),
-                        'operator' => 'assign',
-                        'expr' => array(
-                            'type' => 'variable',
-                            'value' => $upperBoundVariable->getName(),
-                            'file' => $this->_statement['file'],
-                            'line' => $this->_statement['line'],
-                            'char' => $this->_statement['char']
-                        ),
-                        'file' => $this->_statement['file'],
-                        'line' => $this->_statement['line'],
-                        'char' => $this->_statement['char']
-                    )
-                )
+            $builderLet->setAssignments(array($exprBuilder->operators()
+                ->assignVariable($tempVariable->getName(), $exprBuilder->variable($upperBoundVariable->getName())
+                    ->setFile($this->_statement['file'])
+                    ->setLine($this->_statement['line'])
+                    ->setChar($this->_statement['char']))
+                ->setFile($this->_statement['file'])
+                ->setLine($this->_statement['line'])
+                ->setChar($this->_statement['char'])
             ));
-
+            $statement = new LetStatement($builderLet->build());
         } else {
-
             /**
-             * Create an implicit 'let' operation for the initialize expression, @TODO use a builder
+             * Create an implicit 'let' operation for the initialize expression
              */
-            $statement = new LetStatement(array(
-                'type' => 'let',
-                'assignments' => array(
-                    array(
-                        'assign-type' => 'variable',
-                        'variable' => $tempVariable->getName(),
-                        'operator' => 'assign',
-                        'expr' => array(
-                            'type'  => $parameters[0]->getType(),
-                            'value' => $parameters[0]->getCode(),
-                            'file'  => $this->_statement['file'],
-                            'line'  => $this->_statement['line'],
-                            'char'  => $this->_statement['char']
-                        ),
-                        'file' => $this->_statement['file'],
-                        'line' => $this->_statement['line'],
-                        'char' => $this->_statement['char']
-                    )
-                )
+            $builderLet->setAssignments(array($exprBuilder->operators()
+                ->assignVariable($tempVariable->getName(), $exprBuilder->literal($parameters[0]->getType(), $parameters[0]->getCode())
+                    ->setFile($this->_statement['file'])
+                    ->setLine($this->_statement['line'])
+                    ->setChar($this->_statement['char']))
+                ->setFile($this->_statement['file'])
+                ->setLine($this->_statement['line'])
+                ->setChar($this->_statement['char'])
             ));
+            $statement = new LetStatement($builderLet->build());
         }
 
         $statement->compile($compilationContext);
@@ -324,7 +297,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'key' variable
          */
         if (isset($this->_statement['key'])) {
-
             /**
              * Check for anonymous variables
              */
@@ -365,7 +337,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'value' variable
          */
         if (isset($this->_statement['value'])) {
-
             /**
              * Check for anonymous variables
              */
@@ -427,7 +398,6 @@ class ForStatement extends StatementAbstract
         $codePrinter->decreaseLevel();
 
         $codePrinter->output('}');
-
     }
 
     /**
@@ -437,9 +407,8 @@ class ForStatement extends StatementAbstract
      * @param \CompilationContext $compilationContext
      * @return boolean
      */
-    public function compileIterator(array $exprRaw, $compilationContext)
+    public function compileIterator(array $exprRaw, CompilationContext $compilationContext)
     {
-
         $iteratorVariable = $compilationContext->symbolTable->getTempVariableForWrite('zend_object_iterator', $compilationContext);
 
         $compilationContext->headersManager->add('kernel/iterator');
@@ -467,7 +436,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'key' variable
          */
         if (isset($this->_statement['key'])) {
-
             if ($this->_statement['key'] != '_') {
                 $keyVariable = $compilationContext->symbolTable->getVariableForWrite($this->_statement['key'], $compilationContext, $this->_statement['expr']);
                 if ($keyVariable->getType() != 'variable') {
@@ -490,7 +458,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'value' variable
          */
         if (isset($this->_statement['value'])) {
-
             if ($this->_statement['value'] != '_') {
                 $variable = $compilationContext->symbolTable->getVariableForWrite($this->_statement['value'], $compilationContext, $this->_statement['expr']);
                 if ($variable->getType() != 'variable') {
@@ -514,7 +481,7 @@ class ForStatement extends StatementAbstract
          */
         $compilationContext->insideCycle++;
 
-        $codePrinter->output($iteratorVariable ->getName() . ' = zephir_get_iterator(' . $exprVariable->getName() . ' TSRMLS_CC);');
+        $codePrinter->output($iteratorVariable ->getName() . ' = zephir_get_iterator(' . $compilationContext->backend->getVariableCode($exprVariable) . ' TSRMLS_CC);');
 
         $codePrinter->output($iteratorVariable ->getName() . '->funcs->rewind(' . $iteratorVariable->getName() . ' TSRMLS_CC);');
         $codePrinter->output('for (;' . $iteratorVariable->getName() . '->funcs->valid(' . $iteratorVariable->getName() . ' TSRMLS_CC) == SUCCESS && !EG(exception); ' . $iteratorVariable ->getName() . '->funcs->move_forward(' . $iteratorVariable ->getName() . ' TSRMLS_CC)) {');
@@ -526,10 +493,13 @@ class ForStatement extends StatementAbstract
 
         if (isset($this->_statement['value'])) {
             $compilationContext->symbolTable->mustGrownStack(true);
-            $codePrinter->output("\t" . '{ zval **tmp; ');
-            $codePrinter->output("\t" . $iteratorVariable->getName() . '->funcs->get_current_data(' . $iteratorVariable->getName() . ', &tmp TSRMLS_CC);');
-            $codePrinter->output("\t" . $variable->getName() . ' = *tmp;');
-            $codePrinter->output("\t" . '}');
+            $codePrinter->increaseLevel();
+            $codePrinter->output('{');
+            $codePrinter->increaseLevel();
+            $compilationContext->backend->forStatementIterator($iteratorVariable, $variable, $compilationContext);
+            $codePrinter->decreaseLevel();
+            $codePrinter->output('}');
+            $codePrinter->decreaseLevel();
         }
 
         /**
@@ -552,7 +522,7 @@ class ForStatement extends StatementAbstract
 
         $codePrinter->output('}');
 
-        $codePrinter->output($iteratorVariable ->getName() . '->funcs->dtor(' . $iteratorVariable ->getName() . ' TSRMLS_CC);');
+        $compilationContext->backend->destroyIterator($iteratorVariable, $compilationContext);
     }
 
     /**
@@ -565,7 +535,7 @@ class ForStatement extends StatementAbstract
      * @param CompilationContext $compilationContext
      * @param Variable $exprVariable
      */
-    public function compileStringTraverse($expression, $compilationContext, $exprVariable)
+    public function compileStringTraverse($expression, CompilationContext $compilationContext, $exprVariable)
     {
         $codePrinter = $compilationContext->codePrinter;
 
@@ -573,7 +543,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'key' variable
          */
         if (isset($this->_statement['key'])) {
-
             if ($this->_statement['key'] != '_') {
                 $keyVariable = $compilationContext->symbolTable->getVariableForWrite($this->_statement['key'], $compilationContext, $this->_statement['expr']);
                 switch ($keyVariable->getType()) {
@@ -600,7 +569,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'value' variable
          */
         if (isset($this->_statement['value'])) {
-
             if ($this->_statement['value'] != '_') {
                 $variable = $compilationContext->symbolTable->getVariableForWrite($this->_statement['value'], $compilationContext, $this->_statement['expr']);
                 switch ($variable->getType()) {
@@ -630,24 +598,17 @@ class ForStatement extends StatementAbstract
          */
         if ($expression->getType() == 'string') {
             $constantVariable = $compilationContext->symbolTable->getTempLocalVariableForWrite('variable', $compilationContext, $this->_statement);
-            $codePrinter->output('ZVAL_STRING(&' . $constantVariable->getName() . ', "' . Utils::addSlashes($expression->getCode()) . '", 0);');
+            $compilationContext->backend->assignString($constantVariable, Utils::addSlashes($expression->getCode()), $compilationContext, true, false);
             $stringVariable = $constantVariable;
         } else {
             $stringVariable = $exprVariable;
         }
 
+        $stringVariableCode = $compilationContext->backend->getVariableCode($stringVariable);
         if ($this->_statement['reverse']) {
-            if ($stringVariable->isLocalOnly()) {
-                $codePrinter->output('for (' . $tempVariable->getName() . ' = Z_STRLEN_P(&' . $stringVariable->getName() . '); ' . $tempVariable->getName() . ' >= 0; ' . $tempVariable->getName() . '--) {');
-            } else {
-                $codePrinter->output('for (' . $tempVariable->getName() . ' = Z_STRLEN_P(' . $stringVariable->getName() . '); ' . $tempVariable->getName() . ' >= 0; ' . $tempVariable->getName() . '--) {');
-            }
+            $codePrinter->output('for (' . $tempVariable->getName() . ' = Z_STRLEN_P(' . $stringVariableCode . '); ' . $tempVariable->getName() . ' >= 0; ' . $tempVariable->getName() . '--) {');
         } else {
-            if ($stringVariable->isLocalOnly()) {
-                $codePrinter->output('for (' . $tempVariable->getName() . ' = 0; ' . $tempVariable->getName() . ' < Z_STRLEN_P(&' . $stringVariable->getName() . '); ' . $tempVariable->getName() . '++) {');
-            } else {
-                $codePrinter->output('for (' . $tempVariable->getName() . ' = 0; ' . $tempVariable->getName() . ' < Z_STRLEN_P(' . $stringVariable->getName() . '); ' . $tempVariable->getName() . '++) {');
-            }
+            $codePrinter->output('for (' . $tempVariable->getName() . ' = 0; ' . $tempVariable->getName() . ' < Z_STRLEN_P(' . $stringVariableCode . '); ' . $tempVariable->getName() . '++) {');
         }
 
         if (isset($this->_statement['key'])) {
@@ -655,11 +616,7 @@ class ForStatement extends StatementAbstract
         }
 
         $compilationContext->headersManager->add('kernel/operators');
-        if ($stringVariable->isLocalOnly()) {
-            $codePrinter->output("\t" . $variable->getName() . ' = ZEPHIR_STRING_OFFSET(&' . $stringVariable->getName() . ', ' . $tempVariable->getName() . ');');
-        } else {
-            $codePrinter->output("\t" . $variable->getName() . ' = ZEPHIR_STRING_OFFSET(' . $stringVariable->getName() . ', ' . $tempVariable->getName() . ');');
-        }
+        $codePrinter->output("\t" . $variable->getName() . ' = ZEPHIR_STRING_OFFSET(' . $stringVariableCode . ', ' . $tempVariable->getName() . ');');
 
         /**
          * Variables are initialized in a different way inside cycle
@@ -695,16 +652,14 @@ class ForStatement extends StatementAbstract
      * @param CompilationContext $compilationContext
      * @param Variable $exprVariable
      */
-    public function compileHashTraverse($expression, $compilationContext, $exprVariable)
+    public function compileHashTraverse($expression, CompilationContext $compilationContext, Variable $exprVariable)
     {
-
         $codePrinter = $compilationContext->codePrinter;
 
         /**
          * Initialize 'key' variable
          */
         if (isset($this->_statement['key'])) {
-
             if ($this->_statement['key'] != '_') {
                 $keyVariable = $compilationContext->symbolTable->getVariableForWrite($this->_statement['key'], $compilationContext, $this->_statement['expr']);
                 if ($keyVariable->getType() != 'variable') {
@@ -723,7 +678,6 @@ class ForStatement extends StatementAbstract
          * Initialize 'value' variable
          */
         if (isset($this->_statement['value'])) {
-
             if ($this->_statement['value'] != '_') {
                 $variable = $compilationContext->symbolTable->getVariableForWrite($this->_statement['value'], $compilationContext, $this->_statement['expr']);
                 if ($variable->getType() != 'variable') {
@@ -735,6 +689,7 @@ class ForStatement extends StatementAbstract
 
             $variable->setMustInitNull(true);
             $variable->setIsInitialized(true, $compilationContext, $this->_statement);
+            $variable->increaseVariantIfNull();
             $variable->setDynamicTypes('undefined');
         }
 
@@ -742,18 +697,6 @@ class ForStatement extends StatementAbstract
          * Variables are initialized in a different way inside cycle
          */
         $compilationContext->insideCycle++;
-
-        /**
-         * Create a hash table and hash pointer temporary variables
-         */
-        $arrayPointer = $compilationContext->symbolTable->addTemp('HashPosition', $compilationContext);
-        $arrayHash = $compilationContext->symbolTable->addTemp('HashTable', $compilationContext);
-
-        /**
-         * Create a temporary zval to fetch the items from the hash
-         */
-        $tempVariable = $compilationContext->symbolTable->addTemp('variable', $compilationContext);
-        $tempVariable->setIsDoublePointer(true);
 
         $compilationContext->headersManager->add('kernel/hash');
 
@@ -763,8 +706,8 @@ class ForStatement extends StatementAbstract
         /**
          * We have to check if hashes are modified within the for's block
          */
+        $st = null;
         if (isset($this->_statement['statements'])) {
-
             /**
              * Create the statements block here to obtain the last use line
              */
@@ -791,49 +734,21 @@ class ForStatement extends StatementAbstract
             }
         }
 
-        $codePrinter->output('zephir_is_iterable(' . $expression->getCode() . ', &' . $arrayHash->getName() . ', &' . $arrayPointer ->getName() . ', ' . $duplicateHash . ', ' . $this->_statement['reverse'] . ', "' . Compiler::getShortUserPath($this->_statement['file']) . '", ' . $this->_statement['line'] . ');');
-
-        $codePrinter->output('for (');
-        $codePrinter->output('  ; zephir_hash_get_current_data_ex(' . $arrayHash->getName() . ', (void**) &' . $tempVariable->getName() . ', &' . $arrayPointer ->getName() . ') == SUCCESS');
-        if ($this->_statement['reverse']) {
-            $codePrinter->output('  ; zephir_hash_move_backwards_ex(' . $arrayHash->getName() . ', &' . $arrayPointer ->getName() . ')');
-        } else {
-            $codePrinter->output('  ; zephir_hash_move_forward_ex(' . $arrayHash->getName() . ', &' . $arrayPointer ->getName() . ')');
-        }
-        $codePrinter->output(') {');
-
-        if (isset($this->_statement['key'])) {
-            if ($duplicateKey) {
-                $compilationContext->symbolTable->mustGrownStack(true);
-                $codePrinter->output("\t" . 'ZEPHIR_GET_HMKEY(' . $keyVariable->getName() . ', ' . $arrayHash->getName() . ', ' . $arrayPointer ->getName() . ');');
-            } else {
-                $codePrinter->output("\t" . 'ZEPHIR_GET_HKEY(' . $keyVariable->getName() . ', ' . $arrayHash->getName() . ', ' . $arrayPointer ->getName() . ');');
-            }
-        }
-
-        if (isset($this->_statement['value'])) {
-            $compilationContext->symbolTable->mustGrownStack(true);
-            $codePrinter->output("\t" . 'ZEPHIR_GET_HVALUE(' . $variable->getName() . ', ' . $tempVariable->getName() . ');');
-        }
-
-        /**
-         * Compile statements in the 'for' block
-         */
-        if (isset($this->_statement['statements'])) {
-            $st->isLoop(true);
-            if (isset($this->_statement['key'])) {
-                $st->getMutateGatherer()->increaseMutations($this->_statement['key']);
-            }
-            $st->getMutateGatherer()->increaseMutations($this->_statement['value']);
-            $st->compile($compilationContext);
-        }
+        $compilationContext->backend->forStatement(
+            $exprVariable,
+            isset($this->_statement['key']) ? $keyVariable : null,
+            isset($this->_statement['value']) ? $variable : null,
+            $duplicateKey,
+            $duplicateHash,
+            $this->_statement,
+            $st,
+            $compilationContext
+        );
 
         /**
          * Restore the cycle counter
          */
         $compilationContext->insideCycle--;
-
-        $codePrinter->output('}');
     }
 
     /**
@@ -848,7 +763,6 @@ class ForStatement extends StatementAbstract
          * @TODO implement optimizers here
          */
         if ($exprRaw['type'] == 'fcall') {
-
             if ($exprRaw['name'] == 'range') {
                 $status = $this->compileRange($exprRaw, $compilationContext);
                 if ($status !== false) {
@@ -882,7 +796,6 @@ class ForStatement extends StatementAbstract
 
         $exprVariable = $compilationContext->symbolTable->getVariableForRead($expression->getCode(), $compilationContext, $this->_statement['expr']);
         switch ($exprVariable->getType()) {
-
             case 'variable':
             case 'array':
                 $this->compileHashTraverse($expression, $compilationContext, $exprVariable);
@@ -895,6 +808,5 @@ class ForStatement extends StatementAbstract
             default:
                 throw new CompilerException("Cannot traverse value type: " . $exprVariable->getType(), $exprRaw);
         }
-
     }
 }

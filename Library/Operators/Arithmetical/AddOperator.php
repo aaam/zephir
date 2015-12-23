@@ -26,10 +26,9 @@ namespace Zephir\Operators\Arithmetical;
  */
 class AddOperator extends ArithmeticalBaseOperator
 {
-
     protected $_operator = '+';
 
     protected $_bitOperator = '|';
 
-    protected $_zvalOperator = 'zephir_add_function_ex';
+    protected $_zvalOperator = 'zephir_add_function';
 }

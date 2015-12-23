@@ -51,10 +51,8 @@ class VarDumpOptimizer extends OptimizerAbstract
         $resolvedParams = $call->getResolvedParamsAsExpr($expression['parameters'], $context, $expression);
 
         foreach ($resolvedParams as $resolvedParam) {
-
             $variable = $context->symbolTable->getVariable($resolvedParam->getCode());
             if (!$variable || !$variable->isVariable()) {
-
                 /**
                  * Complex expressions require a temporary variable
                  */
@@ -91,16 +89,15 @@ class VarDumpOptimizer extends OptimizerAbstract
                     )
                 ));
                 $statement->compile($context);
-
             } else {
-
                 /**
                  * This mark the variable as used
                  */
                 $variable = $context->symbolTable->getVariableForRead($resolvedParam->getCode(), $context, $expression);
             }
 
-            $context->codePrinter->output('zephir_var_dump(&' . $variable->getName() . ' TSRMLS_CC);');
+            $symbol = $context->backend->getVariableCodePointer($variable);
+            $context->codePrinter->output('zephir_var_dump(' . $symbol . ' TSRMLS_CC);');
         }
 
         return new CompiledExpression('null', 'null', $expression);

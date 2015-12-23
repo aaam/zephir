@@ -58,9 +58,6 @@ class CallUserFuncOptimizer extends OptimizerAbstract
             if (!$symbolVariable->isVariable()) {
                 throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
             }
-            if ($call->mustInitSymbolVariable()) {
-                $symbolVariable->initVariant($context);
-            }
         } else {
             $symbolVariable = $context->symbolTable->addTemp('variable', $context);
             $symbolVariable->initVariant($context);
@@ -80,7 +77,12 @@ class CallUserFuncOptimizer extends OptimizerAbstract
          */
         $call->addCallStatusFlag($context);
 
-        $context->codePrinter->output('ZEPHIR_CALL_USER_FUNC(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ');');
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $context->codePrinter->output('ZEPHIR_CALL_USER_FUNC(' . $symbol . ', ' . $resolvedParams[0] . ');');
         $call->addCallStatusOrJump($context);
 
         return new CompiledExpression('variable', $symbolVariable->getName(), $expression);

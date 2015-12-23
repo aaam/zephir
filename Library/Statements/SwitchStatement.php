@@ -49,14 +49,12 @@ class SwitchStatement extends StatementAbstract
         $resolvedExpr = $exprEval->compile($compilationContext);
 
         if (isset($this->_statement['clauses'])) {
-
             $evalExpr = new EvalExpression();
 
             $codePrinter->output('do {');
             $compilationContext->codePrinter->increaseLevel();
 
             if ($resolvedExpr->getType() != 'variable') {
-
                 /**
                  * Create a temporary variable
                  */
@@ -86,12 +84,11 @@ class SwitchStatement extends StatementAbstract
                     )
                 ));
                 $statement->compile($compilationContext);
-
             } else {
                 $tempVariable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $exprRaw);
             }
 
-            $clauses = $this->_statement['clauses'];
+            $clauses = $this->normalizeClauses($this->_statement['clauses']);
             $tempLeft = array('type' => 'variable', 'value' => $tempVariable->getRealName());
 
             /**
@@ -102,7 +99,6 @@ class SwitchStatement extends StatementAbstract
             $exprStack = array();
             $defaultBlock = null;
             foreach ($clauses as $clause) {
-
                 if ($clause['type'] == 'case') {
                     $expr = array(
                         'type' => 'equals',
@@ -124,7 +120,6 @@ class SwitchStatement extends StatementAbstract
                         $defaultBlock = $clause['statements'];
                     }
                 }
-
             }
 
             /**
@@ -132,7 +127,6 @@ class SwitchStatement extends StatementAbstract
              * grouping 'cases' without a statement block using an 'or'
              */
             foreach ($blocks as $block) {
-
                 $expressions = $block['expr'];
 
                 if (count($expressions) == 1) {
@@ -170,6 +164,33 @@ class SwitchStatement extends StatementAbstract
             $codePrinter->output('} while(0);');
             $codePrinter->outputBlankLine();
         }
+    }
 
+    public function normalizeClauses($clauses)
+    {
+        foreach ($clauses as $defaultIndex => $clause) {
+            if ($clause['type'] == 'default') {
+                break;
+            }
+        }
+
+        if ($defaultIndex === count($clauses) - 1) {
+            return $clauses;
+        }
+
+        $emptyClausesBeforeDefault = array();
+        for ($i = $defaultIndex - 1; $i >= 0; $i--) {
+            $clause = $clauses[$i];
+            if (isset($clause['statements'])) {
+                break;
+            }
+            $emptyClausesBeforeDefault[] = $i;
+        }
+
+        foreach ($emptyClausesBeforeDefault as $i) {
+            unset($clauses[$i]);
+        }
+
+        return $clauses;
     }
 }

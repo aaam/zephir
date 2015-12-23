@@ -7,9 +7,9 @@ namespace Test;
 
 class Assign
 {
-	protected testVar {get};
+	protected testVar { get };
 
-	protected myArray {get};
+	protected myArray { get };
 
 	protected static testVarStatic;
 
@@ -294,6 +294,7 @@ class Assign
 	{
 		var v = "abc";
 		var arr = [];
+
 		let arr = [
 			"a": ["b_key": "b_val", "b": []]
 		];
@@ -307,6 +308,13 @@ class Assign
 
 		let arr[1][2][5] = 6;
 		let arr[1][2][v] = v;
+		return arr;
+	}
+
+	public function testAssign38(index)
+	{
+		var arr = [];
+		let arr[index] = "val";
 		return arr;
 	}
 
@@ -816,5 +824,31 @@ class Assign
 	{
 		var elements;
 		let elements = ["abc": 1, ABDAY_1: DAY_1, ABDAY_2: DAY_2];
+	}
+
+	/**
+	 * @link https://github.com/phalcon/zephir/issues/746
+	 *
+	 */
+	public function testArrayBoolExpressionAssign()
+	{
+		var str = "abc";
+		let this->myArray = [];
+		let this->myArray["a"] = str == "abc";
+		let this->myArray["b"] = str != "abc";
+		return this->myArray;
+	}
+
+	/**
+	 * @link https://github.com/phalcon/zephir/issues/725
+	 */
+	public function testAssignSuperGlobals()
+	{
+		var v = "stest2";
+		let _GET["steststr"] = "stest";
+		let _GET["steststr2"] = v;
+		let _GET["stestint"] = 1;
+		let _GET["stestint2"] = 2;
+		let _GET[v] = "testval";
 	}
 }

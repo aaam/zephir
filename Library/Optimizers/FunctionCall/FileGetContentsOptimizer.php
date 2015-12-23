@@ -61,14 +61,15 @@ class FileGetContentsOptimizer extends OptimizerAbstract
             if ($symbolVariable->isNotVariableAndString()) {
                 throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
             }
-            if ($call->mustInitSymbolVariable()) {
-                $symbolVariable->initVariant($context);
-            }
         }
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
         if ($symbolVariable) {
-            $context->codePrinter->output('zephir_file_get_contents(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ' TSRMLS_CC);');
+            $symbol = $context->backend->getVariableCode($symbolVariable);
+            $context->codePrinter->output('zephir_file_get_contents(' . $symbol . ', ' . $resolvedParams[0] . ' TSRMLS_CC);');
             return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
         } else {
             $context->codePrinter->output('zephir_file_get_contents(NULL, ' . $resolvedParams[0] . ' TSRMLS_CC);');

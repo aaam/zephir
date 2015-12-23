@@ -3,7 +3,22 @@
  * Function calls
  */
 
+/* Test global function declaration */
+function zephir_global_method_test(var str)
+{
+	/**
+	 * Simple comment
+	 */
+	return new Fcall()->testStrtokVarBySlash(str);
+}
+
 namespace Test;
+
+/* Test function declaration in namespace */
+function zephir_namespaced_method_test(var str)
+{
+	return new Fcall()->testCall5(str, 5);
+}
 
 class Fcall
 {
@@ -69,6 +84,11 @@ class Fcall
 	public function testCall7()
 	{
 		memory_get_usage();
+	}
+
+	public function zvalFcallWith1Parameter(var callback, var param1 = null)
+	{
+		{callback}(param1);
 	}
 
 	public function testCall8(var a, var b)

@@ -24,13 +24,11 @@ use Zephir\Operators\Arithmetical\SubOperator;
 use Zephir\Operators\Arithmetical\MulOperator;
 use Zephir\Operators\Arithmetical\DivOperator;
 use Zephir\Operators\Arithmetical\ModOperator;
-
+use Zephir\Operators\Other\ShortTernaryOperator;
 use Zephir\Operators\Unary\MinusOperator;
 use Zephir\Operators\Unary\NotOperator;
-
 use Zephir\Operators\Logical\AndOperator;
 use Zephir\Operators\Logical\OrOperator;
-
 use Zephir\Operators\Comparison\EqualsOperator;
 use Zephir\Operators\Comparison\NotEqualsOperator;
 use Zephir\Operators\Comparison\IdenticalOperator;
@@ -39,14 +37,14 @@ use Zephir\Operators\Comparison\LessEqualOperator;
 use Zephir\Operators\Comparison\LessOperator;
 use Zephir\Operators\Comparison\GreaterOperator;
 use Zephir\Operators\Comparison\GreaterEqualOperator;
-
+use Zephir\Operators\Bitwise\BitwiseNotOperator;
 use Zephir\Operators\Bitwise\BitwiseAndOperator;
 use Zephir\Operators\Bitwise\BitwiseOrOperator;
 use Zephir\Operators\Bitwise\BitwiseXorOperator;
 use Zephir\Operators\Bitwise\ShiftLeftOperator;
 use Zephir\Operators\Bitwise\ShiftRightOperator;
-
 use Zephir\Operators\Other\NewInstanceOperator;
+use Zephir\Operators\Other\NewInstanceTypeOperator;
 use Zephir\Operators\Other\CloneOperator;
 use Zephir\Operators\Other\ConcatOperator;
 use Zephir\Operators\Other\EmptyOperator;
@@ -59,10 +57,8 @@ use Zephir\Operators\Other\InstanceOfOperator;
 use Zephir\Operators\Other\RequireOperator;
 use Zephir\Operators\Other\TypeOfOperator;
 use Zephir\Operators\Other\CastOperator;
-
 use Zephir\Operators\Other\RangeInclusiveOperator;
 use Zephir\Operators\Other\RangeExclusiveOperator;
-
 use Zephir\Expression\Closure;
 use Zephir\Expression\ClosureArrow;
 use Zephir\Expression\Constants;
@@ -246,7 +242,7 @@ class Expression
         }
 
         /**
-         * Variable that receives property accesses must be polimorphic
+         * Variable that receives property accesses must be polymorphic
          */
         if (!$symbolVariable->isVariable() && $symbolVariable->getType() != 'array') {
             throw new CompilerException("Cannot use variable: " . $symbolVariable->getName() . '(' . $symbolVariable->getType() . ") to create empty array", $expression);
@@ -257,7 +253,7 @@ class Expression
          */
         $symbolVariable->setDynamicTypes('array');
 
-        $compilationContext->codePrinter->output('array_init(' . $symbolVariable->getName() . ');');
+        $compilationContext->backend->initArray($symbolVariable, $compilationContext);
 
         return new CompiledExpression('array', $symbolVariable->getRealName(), $expression);
     }
@@ -271,7 +267,6 @@ class Expression
      */
     public function compileTypeHint($expression, CompilationContext $compilationContext)
     {
-
         $expr = new Expression($expression['right']);
         $expr->setReadOnly(true);
         $resolved = $expr->compile($compilationContext);
@@ -302,9 +297,9 @@ class Expression
     {
         $expression = $this->_expression;
         $type = $expression['type'];
+        $compilableExpression = null;
 
         switch ($type) {
-
             case 'null':
                 return new LiteralCompiledExpression('null', null, $expression);
 
@@ -312,11 +307,10 @@ class Expression
             case 'integer':
                 return new LiteralCompiledExpression('int', $expression['value'], $expression);
 
+            case 'long':
             case 'double':
-                return new LiteralCompiledExpression('double', $expression['value'], $expression);
-
             case 'bool':
-                return new LiteralCompiledExpression('bool', $expression['value'], $expression);
+                return new LiteralCompiledExpression($type, $expression['value'], $expression);
 
             case 'string':
                 if (!$this->_stringOperation) {
@@ -325,6 +319,8 @@ class Expression
                     }
                 }
                 return new LiteralCompiledExpression('string', str_replace(PHP_EOL, '\\n', $expression['value']), $expression);
+            case 'istring':
+                return new LiteralCompiledExpression('istring', str_replace(PHP_EOL, '\\n', $expression['value']), $expression);
 
             case 'char':
                 if (!strlen($expression['value'])) {
@@ -340,50 +336,48 @@ class Expression
                 return new LiteralCompiledExpression('char', $expression['value'], $expression);
 
             case 'variable':
-                return new CompiledExpression('variable', $expression['value'], $expression);
+                $var = $compilationContext->symbolTable->getVariable($expression['value']);
+                if ($var) {
+                    if ($var->getRealName() == 'this') {
+                        $var = 'this';
+                    } else {
+                        $var = $var->getName();
+                    }
+                } else {
+                    $var = $expression['value'];
+                }
+                return new CompiledExpression('variable', $var, $expression);
 
             case 'constant':
-                $constant = new Constants();
-                $constant->setReadOnly($this->isReadOnly());
-                $constant->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $constant->compile($expression, $compilationContext);
+                $compilableExpression = new Constants();
+                break;
 
             case 'empty-array':
                 return $this->emptyArray($expression, $compilationContext);
 
             case 'array-access':
-                $arrayAccess = new NativeArrayAccess();
-                $arrayAccess->setReadOnly($this->isReadOnly());
-                $arrayAccess->setNoisy($this->isNoisy());
-                $arrayAccess->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $arrayAccess->compile($expression, $compilationContext);
+                $compilableExpression = new NativeArrayAccess();
+                $compilableExpression->setNoisy($this->isNoisy());
+                break;
 
             case 'property-access':
-                $propertyAccess = new PropertyAccess();
-                $propertyAccess->setReadOnly($this->isReadOnly());
-                $propertyAccess->setNoisy($this->isNoisy());
-                $propertyAccess->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $propertyAccess->compile($expression, $compilationContext);
+                $compilableExpression = new PropertyAccess();
+                $compilableExpression->setNoisy($this->isNoisy());
+                break;
 
             case 'property-string-access':
             case 'property-dynamic-access':
-                $propertyAccess = new PropertyDynamicAccess();
-                $propertyAccess->setReadOnly($this->isReadOnly());
-                $propertyAccess->setNoisy($this->isNoisy());
-                $propertyAccess->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $propertyAccess->compile($expression, $compilationContext);
+                $compilableExpression = new PropertyDynamicAccess();
+                $compilableExpression->setNoisy($this->isNoisy());
+                break;
 
             case 'static-constant-access':
-                $staticConstantAccess = new StaticConstantAccess();
-                $staticConstantAccess->setReadOnly($this->isReadOnly());
-                $staticConstantAccess->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $staticConstantAccess->compile($expression, $compilationContext);
+                $compilableExpression = new StaticConstantAccess();
+                break;
 
             case 'static-property-access':
-                $staticPropertyAccess = new StaticPropertyAccess();
-                $staticPropertyAccess->setReadOnly($this->isReadOnly());
-                $staticPropertyAccess->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $staticPropertyAccess->compile($expression, $compilationContext);
+                $compilableExpression = new StaticPropertyAccess();
+                break;
 
             case 'fcall':
                 $functionCall = new FunctionCall();
@@ -398,166 +392,120 @@ class Expression
                 return $staticCall->compile($this, $compilationContext);
 
             case 'isset':
-                $expr = new IssetOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new IssetOperator();
+                break;
 
             case 'fetch':
-                $expr = new FetchOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new FetchOperator();
+                break;
 
             case 'empty':
-                $expr = new EmptyOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new EmptyOperator();
+                break;
 
             case 'array':
-                $array = new NativeArray();
-                $array->setReadOnly($this->isReadOnly());
-                $array->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $array->compile($expression, $compilationContext);
+                $compilableExpression = new NativeArray();
+                break;
 
             case 'new':
-                $expr = new NewInstanceOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new NewInstanceOperator();
+                break;
+
+            case 'new-type':
+                $compilableExpression = new NewInstanceTypeOperator();
+                break;
 
             case 'not':
-                $expr = new NotOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new NotOperator();
+                break;
+
+            case 'bitwise_not':
+                $compilableExpression = new BitwiseNotOperator();
+                break;
 
             case 'equals':
-                $expr = new EqualsOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new EqualsOperator();
+                break;
 
             case 'not-equals':
-                $expr = new NotEqualsOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new NotEqualsOperator();
+                break;
 
             case 'identical':
-                $expr = new IdenticalOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new IdenticalOperator();
+                break;
 
             case 'not-identical':
-                $expr = new NotIdenticalOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new NotIdenticalOperator();
+                break;
 
             case 'greater':
-                $expr = new GreaterOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new GreaterOperator();
+                break;
 
             case 'less':
-                $expr = new LessOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new LessOperator();
+                break;
 
             case 'less-equal':
-                $expr = new LessEqualOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new LessEqualOperator();
+                break;
 
             case 'greater-equal':
-                $expr = new GreaterEqualOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new GreaterEqualOperator();
+                break;
 
             case 'add':
-                $expr = new AddOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new AddOperator();
+                break;
 
             case 'minus':
-                $expr = new MinusOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new MinusOperator();
+                break;
 
             case 'sub':
-                $expr = new SubOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new SubOperator();
+                break;
 
             case 'mul':
-                $expr = new MulOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new MulOperator();
+                break;
 
             case 'div':
-                $expr = new DivOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new DivOperator();
+                break;
 
             case 'mod':
-                $expr = new ModOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new ModOperator();
+                break;
 
             case 'and':
-                $expr = new AndOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new AndOperator();
+                break;
 
             case 'or':
-                $expr = new OrOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new OrOperator();
+                break;
 
             case 'bitwise_and':
-                $expr = new BitwiseAndOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new BitwiseAndOperator();
+                break;
 
             case 'bitwise_or':
-                $expr = new BitwiseOrOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new BitwiseOrOperator();
+                break;
 
             case 'bitwise_xor':
-                $expr = new BitwiseXorOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new BitwiseXorOperator();
+                break;
 
             case 'bitwise_shiftleft':
-                $expr = new ShiftLeftOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new ShiftLeftOperator();
+                break;
 
             case 'bitwise_shiftright':
-                $expr = new ShiftRightOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new ShiftRightOperator();
+                break;
 
             case 'concat':
                 $expr = new ConcatOperator();
@@ -565,16 +513,12 @@ class Expression
                 return $expr->compile($expression, $compilationContext);
 
             case 'irange':
-                $expr = new RangeInclusiveOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new RangeInclusiveOperator();
+                break;
 
             case 'erange':
-                $expr = new RangeExclusiveOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new RangeExclusiveOperator();
+                break;
 
             case 'list':
                 if ($expression['left']['type'] == 'list') {
@@ -592,28 +536,26 @@ class Expression
                 return $resolved;
 
             case 'cast':
-                $expr = new CastOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new CastOperator();
+                break;
 
             case 'type-hint':
                 return $this->compileTypeHint($expression, $compilationContext);
 
             case 'instanceof':
-                $expr = new InstanceOfOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new InstanceOfOperator();
+                break;
 
             case 'clone':
-                $expr = new CloneOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new CloneOperator();
+                break;
 
             case 'ternary':
-                $expr = new TernaryOperator();
+                $compilableExpression = new TernaryOperator();
+                break;
+
+            case 'short-ternary':
+                $expr = new ShortTernaryOperator();
                 $expr->setReadOnly($this->isReadOnly());
                 $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
                 return $expr->compile($expression, $compilationContext);
@@ -635,37 +577,34 @@ class Expression
                 return $expr->compile($expression, $compilationContext);
 
             case 'typeof':
-                $expr = new TypeOfOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new TypeOfOperator();
+                break;
 
             case 'require':
-                $expr = new RequireOperator();
-                $expr->setReadOnly($this->isReadOnly());
-                $expr->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $expr->compile($expression, $compilationContext);
+                $compilableExpression = new RequireOperator();
+                break;
 
             case 'closure':
-                $closure = new Closure();
-                $closure->setReadOnly($this->isReadOnly());
-                $closure->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $closure->compile($expression, $compilationContext);
+                $compilableExpression = new Closure();
+                break;
 
             case 'closure-arrow':
-                $closure = new ClosureArrow();
-                $closure->setReadOnly($this->isReadOnly());
-                $closure->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $closure->compile($expression, $compilationContext);
+                $compilableExpression = new ClosureArrow();
+                break;
 
             case 'reference':
-                $reference = new Reference();
-                $reference->setReadOnly($this->isReadOnly());
-                $reference->setExpectReturn($this->_expecting, $this->_expectingVariable);
-                return $reference->compile($expression, $compilationContext);
+                $compilableExpression = new Reference();
+                break;
 
             default:
                 throw new CompilerException("Unknown expression: " . $type, $expression);
         }
+
+        if (!$compilableExpression) {
+            throw new CompilerException("Unknown expression passed as compilableExpression", $expression);
+        }
+        $compilableExpression->setReadOnly($this->isReadOnly());
+        $compilableExpression->setExpectReturn($this->_expecting, $this->_expectingVariable);
+        return $compilableExpression->compile($expression, $compilationContext);
     }
 }

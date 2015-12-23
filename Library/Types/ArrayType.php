@@ -22,6 +22,7 @@ namespace Zephir\Types;
 use Zephir\Call;
 use Zephir\CompilationContext;
 use Zephir\Expression;
+use Zephir\Expression\Builder\BuilderFactory;
 use Zephir\Builder\FunctionCallBuilder;
 use Zephir\FunctionCall;
 
@@ -35,6 +36,55 @@ class ArrayType extends AbstractType
     /**
      * {@inheritdoc}
      */
+    public $methodMap = array(
+        'join' => 'join',
+        'reversed' => 'array_reverse',
+        'rev' => 'array_reverse',
+        'diff' => 'array_diff',
+        'flip' => 'array_flip',
+        'fill' => 'array_fill',
+        'walk' => 'array_walk',
+        'haskey' => 'array_key_exists',
+        'keys' => 'array_keys',
+        'values' => 'array_values',
+        'split' => 'array_chunk',
+        'combine' => 'array_combine',
+        'intersect' => 'array_intersect',
+        'merge' => 'array_merge',
+        'mergerecursive' => 'array_merge_recursive',
+        'pad' => 'array_pad',
+        'pop' => 'array_pop',
+        'push' => 'array_push',
+        'rand' => 'array_rand',
+        'replace' => 'array_replace',
+        'map' => 'array_map',
+        'replacerecursive' => 'array_replace_recursive',
+        'shift' => 'array_shift',
+        'slice' => 'array_slice',
+        'splice' => 'array_splice',
+        'sum' => 'array_sum',
+        'unique' => 'array_unique',
+        'prepend' => 'array_unshift',
+        'count' => 'count',
+        'current' => 'current',
+        'each' => 'each',
+        'end' => 'end',
+        'key' => 'key',
+        'next' => 'next',
+        'prev' => 'prev',
+        'reset' => 'reset',
+        'sort' => 'sort',
+        'sortbykey' => 'ksort',
+        'reversesort' => 'rsort',
+        'reversesortbykey' => 'krsort',
+        'shuffle' => 'shuffle',
+        'tojson' => 'json_encode',
+        'reduce' => 'array_reduce',
+    );
+
+    /**
+     * {@inheritdoc}
+     */
     public function getTypeName()
     {
         return 'array';
@@ -43,65 +93,12 @@ class ArrayType extends AbstractType
     /**
      * {@inheritdoc}
      */
-    protected function getMethodMap()
-    {
-        return array(
-            'join' => 'join',
-            'reversed' => 'array_reverse',
-            'rev' => 'array_reverse',
-            'diff' => 'array_diff',
-            'flip' => 'array_flip',
-            'walk' => 'array_walk',
-            'haskey' => 'array_key_exists',
-            'keys' => 'array_keys',
-            'values' => 'array_values',
-            'split' => 'array_chunk',
-            'combine' => 'array_combine',
-            'intersect' => 'array_intersect',
-            'merge' => 'array_merge',
-            'mergerecursive' => 'array_merge_recursive',
-            'pad' => 'array_pad',
-            'pop' => 'array_pop',
-            'push' => 'array_push',
-            'rand' => 'array_rand',
-            'replace' => 'array_replace',
-            'map' => 'array_map',
-            'replacerecursive' => 'array_replace_recursive',
-            'shift' => 'array_shift',
-            'slice' => 'array_slice',
-            'splice' => 'array_splice',
-            'sum' => 'array_sum',
-            'unique' => 'array_unique',
-            'prepend' => 'array_unshift',
-            'count' => 'count',
-            'current' => 'current',
-            'each' => 'each',
-            'end' => 'end',
-            'key' => 'key',
-            'next' => 'next',
-            'prev' => 'prev',
-            'reset' => 'reset',
-            'sort' => 'sort',
-            'sortbykey' => 'ksort',
-            'reversesort' => 'rsort',
-            'reversesortbykey' => 'krsort',
-            'shuffle' => 'shuffle',
-            'tojson' => 'json_encode',
-            'reduce' => 'array_reduce',
-        );
-    }
-
-    /**
-     * Returns the number of the parameter where the object must be bound
-     *
-     * @param $methodName
-     * @return int
-     */
     protected function getNumberParam($methodName)
     {
         if ($methodName == "map") {
             return 1;
         }
+
         return 0;
     }
 
@@ -117,16 +114,14 @@ class ArrayType extends AbstractType
     public function join($caller, CompilationContext $compilationContext, Call $call, array $expression)
     {
 
-        $builder = new FunctionCallBuilder(
-            'join',
-            array_merge($expression['parameters'], array(array('parameter' => $caller))),
-            FunctionCall::CALL_NORMAL,
-            $expression['file'],
-            $expression['line'],
-            $expression['char']
-        );
+        $functionCall = BuilderFactory::getInstance()->statements()
+            ->functionCall('join', $expression['parameters'])
+            ->addArgument($caller)
+            ->setFile($expression['file'])
+            ->setLine($expression['line'])
+            ->setChar($expression['char']);
 
-        $expression = new Expression($builder->get());
+        $expression = new Expression($functionCall->build());
 
         return $expression->compile($compilationContext);
     }

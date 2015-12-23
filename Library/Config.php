@@ -20,16 +20,35 @@
 namespace Zephir;
 
 /**
- * Config
- *
  * Manages compiler global configuration
+ *
+ * Class Config
+ * @package Zephir
  */
 class Config
 {
-    protected $_config = array(
+    /**
+     * Default configuration for project
+     *
+     * @var array
+     */
+    protected $config = array(
         'stubs' => array(
             'path' => 'ide/%version%/%namespace%/',
             'stubs-run-after-generate' => false,
+        ),
+        'api' => array(
+            'path' => 'doc/%version%',
+            'theme' => array(
+                'name'    => 'zephir',
+                'options' => array(
+                    'github'           => null,
+                    'analytics'        => null,
+                    'main_color'       => '#3E6496',
+                    'link_color'       => '#3E6496',
+                    'link_hover_color' => '#5F9AE7'
+                )
+            )
         ),
         'warnings' => array(
             'unused-variable'                    => true,
@@ -58,13 +77,14 @@ class Config
             'conditional-initialization'         => true
         ),
         'optimizations' => array(
-            'static-type-inference'             => true,
-            'static-type-inference-second-pass' => true,
-            'local-context-pass'                => true,
-            'constant-folding'                  => true,
-            'static-constant-class-folding'     => true,
-            'call-gatherer-pass'                => true,
-            'check-invalid-reads'               => false
+            'static-type-inference'              => true,
+            'static-type-inference-second-pass'  => true,
+            'local-context-pass'                 => true,
+            'constant-folding'                   => true,
+            'static-constant-class-folding'      => true,
+            'call-gatherer-pass'                 => true,
+            'check-invalid-reads'                => false,
+            'internal-call-transformation'       => false
         ),
         'namespace'   => '',
         'name'        => '',
@@ -72,32 +92,39 @@ class Config
         'author'      => '',
         'version'     => '0.0.1',
         'verbose'     => false,
-        'requires' => array(
+        'requires'    => array(
             'extensions'    => array()
         )
     );
 
-    protected $_changed = false;
+    /**
+     * Is config changed?
+     *
+     * @var bool
+     */
+    protected $changed = false;
 
     /**
      * Config constructor
      *
+     * @throws Exception
      */
     public function __construct()
     {
         if (file_exists('config.json')) {
-
             $config = json_decode(file_get_contents('config.json'), true);
             if (!is_array($config)) {
-                throw new Exception("config.json is not valid or there is no Zephir extension initialized in this directory");
+                throw new Exception(
+                    "config.json is not valid or there is no Zephir extension initialized in this directory"
+                );
             }
 
             foreach ($config as $key => $configSection) {
                 if (!is_array($configSection)) {
-                    $this->_config[$key] = $configSection;
+                    $this->config[$key] = $configSection;
                 } else {
                     foreach ($configSection as $subKey => $subValue) {
-                        $this->_config[$key][$subKey] = $subValue;
+                        $this->config[$key][$subKey] = $subValue;
                     }
                 }
             }
@@ -114,14 +141,14 @@ class Config
     public function get($key, $namespace = null)
     {
         if ($namespace !== null) {
-            if (isset($this->_config[$namespace][$key])) {
-                return $this->_config[$namespace][$key];
+            if (isset($this->config[$namespace][$key])) {
+                return $this->config[$namespace][$key];
             } else {
                 //new \Exception('Option [' . $namespace . '][' . $key . '] not exists');
             }
         } else {
-            if (isset($this->_config[$key])) {
-                return $this->_config[$key];
+            if (isset($this->config[$key])) {
+                return $this->config[$key];
             } else {
                 //new \Exception('Option [' . $key . '] not exists');
             }
@@ -140,12 +167,12 @@ class Config
     public function set($key, $value, $namespace = null)
     {
         if ($namespace !== null) {
-            $this->_config[$namespace][$key] = $value;
+            $this->config[$namespace][$key] = $value;
         } else {
-            $this->_config[$key] = $value;
+            $this->config[$key] = $value;
         }
 
-        $this->_changed = true;
+        $this->changed = true;
     }
 
     /**
@@ -153,11 +180,11 @@ class Config
      */
     public function saveOnExit()
     {
-        if ($this->_changed && !file_exists('config.json')) {
+        if ($this->changed && !file_exists('config.json')) {
             if (defined('JSON_PRETTY_PRINT')) {
-                $config = json_encode($this->_config, JSON_PRETTY_PRINT);
+                $config = json_encode($this->config, JSON_PRETTY_PRINT);
             } else {
-                $config = json_encode($this->_config);
+                $config = json_encode($this->config);
             }
             file_put_contents('config.json', $config);
         }

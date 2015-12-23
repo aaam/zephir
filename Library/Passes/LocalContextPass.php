@@ -137,7 +137,6 @@ class LocalContextPass
      * Returns the number of assignment instructions that mutated a variable
      *
      * @param string $variable
-     *
      * @return int
      */
     public function getNumberOfMutations($variable)
@@ -175,6 +174,7 @@ class LocalContextPass
 
     /**
      * Returns the line where the latest unset operation was made
+     *
      * @return int
      */
     public function getLastUnsetLine()
@@ -185,16 +185,13 @@ class LocalContextPass
     public function passLetStatement(array $statement)
     {
         foreach ($statement['assignments'] as $assignment) {
-
             if (isset($assignment['expr'])) {
                 $this->passExpression($assignment['expr']);
             }
             $this->increaseMutations($assignment['variable']);
 
             switch ($assignment['assign-type']) {
-
                 case 'variable':
-
                     switch ($assignment['operator']) {
                         case 'mul-assign':
                         case 'sub-assign':
@@ -204,7 +201,6 @@ class LocalContextPass
                     }
 
                     switch ($assignment['expr']['type']) {
-
                         case 'property-access':
                         case 'property-dynamic-access':
                         case 'property-string-access':
@@ -223,6 +219,7 @@ class LocalContextPass
                         case 'type-hint':
                         case 'minus':
                         case 'new':
+                        case 'new-type':
                         case 'closure':
                         case 'closure-arrow':
                         case 'reference':
@@ -262,7 +259,6 @@ class LocalContextPass
                 case 'array-index':
                 case 'object-property-array-index':
                 case 'object-property-append':
-
                     switch ($assignment['expr']['type']) {
                         case 'variable':
                             $this->markVariableNoLocal($assignment['expr']['value']);
@@ -328,7 +324,6 @@ class LocalContextPass
     public function passExpression(array $expression)
     {
         switch ($expression['type']) {
-
             case 'bool':
             case 'double':
             case 'int':
@@ -336,6 +331,7 @@ class LocalContextPass
             case 'long':
             case 'ulong':
             case 'string':
+            case 'istring':
             case 'null':
             case 'char':
             case 'uchar':
@@ -384,6 +380,7 @@ class LocalContextPass
                 break;
 
             case 'typeof':
+            case 'bitwise_not':
             case 'not':
                 $this->passExpression($expression['left']);
                 break;
@@ -407,6 +404,7 @@ class LocalContextPass
                 break;
 
             case 'new':
+            case 'new-type':
                 $this->passNew($expression);
                 break;
 
@@ -424,8 +422,9 @@ class LocalContextPass
             case 'require':
             case 'clone':
             case 'likely':
-            case 'unlikely':
-            case 'ternary': /* do special pass later */
+            case 'unlikely'
+            /* do special pass later */:
+            case 'ternary':
                 $this->passExpression($expression['left']);
                 break;
 
@@ -457,9 +456,7 @@ class LocalContextPass
     public function passStatementBlock(array $statements)
     {
         foreach ($statements as $statement) {
-
             switch ($statement['type']) {
-
                 case 'let':
                     $this->passLetStatement($statement);
                     break;
@@ -611,6 +608,7 @@ class LocalContextPass
                 case 'continue':
                 case 'empty':
                 case 'cblock':
+                case 'comment':
                     break;
 
                 default:

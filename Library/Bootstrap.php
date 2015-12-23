@@ -19,6 +19,7 @@
 
 namespace Zephir;
 
+use Zephir\Compiler;
 use Zephir\Commands\CommandAbstract;
 
 /**
@@ -34,7 +35,7 @@ class Bootstrap
     protected static $commands = array();
 
     /**
-     * Shows an exception opening the file and highlighing the wrong part
+     * Shows an exception opening the file and highlighting the wrong part
      *
      * @param \Exception $e
      * @param Config $config
@@ -85,7 +86,6 @@ class Bootstrap
     public static function boot()
     {
         try {
-
             /**
              * Global config
              */
@@ -108,7 +108,6 @@ class Bootstrap
              */
             if ($_SERVER['argc'] >= 2) {
                 for ($i = 2; $i < $_SERVER['argc']; $i++) {
-
                     $parameter = $_SERVER['argv'][$i];
 
                     if (preg_match('/^-fno-([a-z0-9\-]+)$/', $parameter, $matches)) {
@@ -141,7 +140,6 @@ class Bootstrap
                     }
 
                     switch ($parameter) {
-
                         case '-w':
                             $config->set('silent', true);
                             break;
@@ -166,7 +164,6 @@ class Bootstrap
              */
             foreach (new \DirectoryIterator(ZEPHIRPATH . 'Library/Commands') as $item) {
                 if (!$item->isDir()) {
-
                     $className = 'Zephir\\Commands\\' . str_replace('.php', '', $item->getBaseName());
                     $class = new \ReflectionClass($className);
 
@@ -186,7 +183,6 @@ class Bootstrap
             }
 
             if (!isset(self::$commands[$action])) {
-
                 $message = 'Unrecognized action "' . $action . '"';
                 $metaphone = metaphone($action);
                 foreach (self::$commands as $key => $command) {
@@ -202,7 +198,6 @@ class Bootstrap
              * Execute the command
              */
             self::$commands[$action]->execute($config, $logger);
-
         } catch (\Exception $e) {
             self::showException($e, isset($config) ? $config : null);
         }

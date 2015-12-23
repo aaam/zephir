@@ -21,6 +21,7 @@ namespace Zephir\Expression;
 
 use Zephir\ClassMethod;
 use Zephir\Exception;
+use Zephir\Expression\Builder\BuilderFactory;
 use Zephir\Variable;
 use Zephir\ClassMethodParameters;
 use Zephir\CompiledExpression;
@@ -40,7 +41,6 @@ use Zephir\Builder\RawExpressionBuilder;
  */
 class ClosureArrow extends Closure
 {
-
     /**
      * Creates a closure
      *
@@ -83,13 +83,13 @@ class ClosureArrow extends Closure
             ),
         ));
 
-        $statementBlock = new StatementsBlockBuilder(array(
-            new ReturnStatementBuilder(
-                new RawExpressionBuilder($expression['right'])
-            )
+        $exprBuilder = BuilderFactory::getInstance();
+        $statementBlockBuilder = $exprBuilder->statements()->block(array(
+            $exprBuilder->statements()
+                ->returnX($exprBuilder->raw($expression['right']))
         ));
 
-        $block = $statementBlock->get();
+        $block = $statementBlockBuilder->build();
 
         $classMethod = new ClassMethod(
             $classDefinition,
@@ -116,7 +116,7 @@ class ClosureArrow extends Closure
         }
 
         $symbolVariable->initVariant($compilationContext);
-        $compilationContext->codePrinter->output('zephir_create_closure_ex(' . $symbolVariable->getName() . ', NULL, ' . $classDefinition->getClassEntry() . ', SS("__invoke") TSRMLS_CC);');
+        $compilationContext->backend->createClosure($symbolVariable, $classDefinition, $compilationContext);
 
         self::$id++;
 

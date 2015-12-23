@@ -38,13 +38,11 @@ class EchoStatement extends StatementAbstract
     public function compile(CompilationContext $compilationContext)
     {
         foreach ($this->_statement['expressions'] as $echoExpr) {
-
             $expr = new Expression($echoExpr);
             $expr->setReadOnly(true);
             $resolvedExpr = $expr->compile($compilationContext);
 
             switch ($resolvedExpr->getType()) {
-
                 case 'int':
                     $compilationContext->codePrinter->output('php_printf("%d", ' . $resolvedExpr->getCode() . ');');
                     break;
@@ -76,7 +74,6 @@ class EchoStatement extends StatementAbstract
                 case 'variable':
                     $variable = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $echoExpr);
                     switch ($variable->getType()) {
-
                         case 'int':
                             $compilationContext->codePrinter->output('php_printf("%d", ' . $variable->getName() . ');');
                             break;
@@ -100,7 +97,7 @@ class EchoStatement extends StatementAbstract
 
                         case 'string':
                         case 'variable':
-                            $compilationContext->codePrinter->output('zend_print_zval(' . $variable->getName() . ', 0);');
+                            $compilationContext->codePrinter->output('zend_print_zval(' . $compilationContext->backend->getVariableCode($variable) . ', 0);');
                             break;
 
                         case 'null':

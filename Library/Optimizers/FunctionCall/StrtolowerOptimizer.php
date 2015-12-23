@@ -59,15 +59,16 @@ class StrtolowerOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         $context->headersManager->add('kernel/string');
         $symbolVariable->setDynamicTypes('string');
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
-        $context->codePrinter->output('zephir_fast_strtolower(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ');');
+
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $context->codePrinter->output('zephir_fast_strtolower(' . $symbol . ', ' . $resolvedParams[0] . ');');
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);
     }
 }

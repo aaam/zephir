@@ -19,6 +19,8 @@
 
 namespace Zephir;
 
+use Zephir\Documentation\DocblockParser;
+
 /**
  * CompilerFile
  *
@@ -27,7 +29,6 @@ namespace Zephir;
  */
 class CompilerFile
 {
-
     /**
      * Namespace of the
      */
@@ -52,6 +53,11 @@ class CompilerFile
      * @var ClassDefinition
      */
     protected $_classDefinition;
+
+    /**
+     * @var FunctionDefinition[]
+     */
+    protected $_functionDefinitions = array();
 
     /**
      * @var array
@@ -83,6 +89,7 @@ class CompilerFile
         $this->_headerCBlocks = array();
         $this->_config = $config;
         $this->_logger = $logger;
+        $this->_aliasManager = new AliasManager();
     }
 
     /**
@@ -94,6 +101,11 @@ class CompilerFile
     {
         $this->_classDefinition->setAliasManager($this->_aliasManager);
         return $this->_classDefinition;
+    }
+
+    public function getFunctionDefinitions()
+    {
+        return $this->_functionDefinitions;
     }
 
     /**
@@ -117,6 +129,22 @@ class CompilerFile
     }
 
     /**
+     * Adds a function to the function definitions
+     *
+     * @param FunctionDefinition $func
+     * @param array $statement
+     */
+    public function addFunction(Compiler $compiler, FunctionDefinition $func, $statement = null)
+    {
+        $compiler->addFunction($func, $statement);
+        $funcName = strtolower($func->getInternalName());
+        if (isset($this->_functionDefinitions[$funcName])) {
+            throw new CompilerException("Function '" . $func->getName() . "' was defined more than one time (in the same file)", $statement);
+        }
+        $this->_functionDefinitions[$funcName] = $func;
+    }
+
+    /**
      * Compiles the file generating a JSON intermediate representation
      *
      * @param Compiler $compiler
@@ -124,37 +152,33 @@ class CompilerFile
      */
     public function genIR(Compiler $compiler)
     {
-
         $normalizedPath = str_replace(array(DIRECTORY_SEPARATOR, ":", '/'), '_', realpath($this->_filePath));
         $compilePath = DIRECTORY_SEPARATOR . Compiler::VERSION . DIRECTORY_SEPARATOR . $normalizedPath . ".js";
         $zepRealPath = realpath($this->_filePath);
 
-        if (PHP_OS == "WINNT") {
-            $zephirParserBinary = ZEPHIRPATH . 'bin\zephir-parser.exe';
-        } else {
-            $zephirParserBinary = ZEPHIRPATH . 'bin/zephir-parser';
-        }
-
-        if (!file_exists($zephirParserBinary)) {
-            throw new Exception($zephirParserBinary . ' was not found');
-        }
-
         $changed = false;
+
         $fileSystem = $compiler->getFileSystem();
         if ($fileSystem->exists($compilePath)) {
             $modificationTime = $fileSystem->modificationTime($compilePath);
-            if ($modificationTime < filemtime($zepRealPath) || $modificationTime < filemtime($zephirParserBinary)) {
-                $fileSystem->system($zephirParserBinary . ' ' . $zepRealPath, 'stdout', $compilePath);
+            if ($modificationTime < filemtime($zepRealPath)) {
                 $changed = true;
             }
         } else {
-            $fileSystem->system($zephirParserBinary . ' ' . $zepRealPath, 'stdout', $compilePath);
             $changed = true;
         }
 
+        $ir = null;
+        if ($changed) {
+            $ir = zephir_parse_file(file_get_contents($zepRealPath), $zepRealPath);
+            $fileSystem->write($compilePath, json_encode($ir, JSON_PRETTY_PRINT));
+        }
+
         if ($changed || !$fileSystem->exists($compilePath . '.php')) {
-            $json = json_decode($fileSystem->read($compilePath), true);
-            $data = '<?php return ' . var_export($json, true) . ';';
+            if (!isset($ir)) {
+                $ir = json_decode($fileSystem->read($compilePath), true);
+            }
+            $data = '<?php return ' . var_export($ir, true) . ';';
             $fileSystem->write($compilePath . '.php', $data);
         }
 
@@ -166,9 +190,9 @@ class CompilerFile
      *
      * @param CompilationContext $compilationContext
      * @param string $namespace
-     * @param array $topStatement
+     * @param array $classStatement
      */
-    public function compileClass(CompilationContext $compilationContext, $namespace, $topStatement)
+    public function compileClass(CompilationContext $compilationContext, $namespace, $classStatement)
     {
         $classDefinition = $this->_classDefinition;
 
@@ -176,45 +200,30 @@ class CompilerFile
          * Do the compilation
          */
         $classDefinition->compile($compilationContext);
+    }
 
-        $separators = str_repeat('../', count(explode('\\', $classDefinition->getCompleteName())) - 1);
+    /**
+     * Compiles a function
+     *
+     * @param CompilationContext $compilationContext
+     * @param FunctionDefinition $functionDefinition
+     */
+    public function compileFunction(CompilationContext $compilationContext, FunctionDefinition $functionDefinition)
+    {
+        /** Make sure we do not produce calls like ZEPHIR_CALL_SELF */
+        $bakClassDefinition = $compilationContext->classDefinition;
+        $compilationContext->classDefinition = null;
+        $compilationContext->currentMethod = $functionDefinition;
 
-        $code  = '' . PHP_EOL;
-        $code .= '#ifdef HAVE_CONFIG_H' . PHP_EOL;
-        $code .= '#include "' . $separators . 'ext_config.h"' . PHP_EOL;
-        $code .= '#endif' . PHP_EOL;
-        $code .= '' . PHP_EOL;
+        $codePrinter = $compilationContext->codePrinter;
+        $codePrinter->output('PHP_FUNCTION(' . $functionDefinition->getInternalName() . ') {');
+        $functionDefinition->compile($compilationContext);
+        $codePrinter->output('}');
+        $codePrinter->outputBlankLine();
 
-        $code .= '#include <php.h>' . PHP_EOL;
-        $code .= '#include "' . $separators . 'php_ext.h"' . PHP_EOL;
-        $code .= '#include "' . $separators . 'ext.h"' . PHP_EOL;
-        $code .= '' . PHP_EOL;
-
-        if ($classDefinition->getType() == 'class') {
-            $code .= '#include <Zend/zend_operators.h>' . PHP_EOL;
-            $code .= '#include <Zend/zend_exceptions.h>' . PHP_EOL;
-            $code .= '#include <Zend/zend_interfaces.h>' . PHP_EOL;
-        } else {
-            $code .= '#include <Zend/zend_exceptions.h>' . PHP_EOL;
-        }
-        $code .= '' . PHP_EOL;
-
-        $code .= '#include "kernel/main.h"' . PHP_EOL;
-
-        if ($classDefinition->getType() == 'class') {
-            foreach ($compilationContext->headersManager->get() as $header => $one) {
-                $code .= '#include "' . $header . '.h"' . PHP_EOL;
-            }
-        }
-
-        if (count($this->_headerCBlocks) > 0) {
-            $code .= implode($this->_headerCBlocks, PHP_EOL) . PHP_EOL;
-        }
-
-        /**
-         * Prepend the required files to the header
-         */
-        $compilationContext->codePrinter->preOutput($code);
+        /** Restore */
+        $compilationContext->classDefinition = $bakClassDefinition;
+        $compilationContext->currentMethod = null;
     }
 
     /**
@@ -233,8 +242,9 @@ class CompilerFile
      *
      * @param string $namespace
      * @param array $topStatement
+     * @param array $docblock
      */
-    public function preCompileInterface($namespace, $topStatement)
+    public function preCompileInterface($namespace, $topStatement, $docblock)
     {
         $classDefinition = new ClassDefinition($namespace, $topStatement['name']);
         $classDefinition->setIsExternal($this->_external);
@@ -248,6 +258,10 @@ class CompilerFile
 
         $classDefinition->setType('interface');
 
+        if (is_array($docblock)) {
+            $classDefinition->setDocBlock($docblock["value"]);
+        }
+
         if (isset($topStatement['definition'])) {
             $definition = $topStatement['definition'];
 
@@ -256,7 +270,11 @@ class CompilerFile
              */
             if (isset($definition['constants'])) {
                 foreach ($definition['constants'] as $constant) {
-                    $classConstant = new ClassConstant($constant['name'], isset($constant['default']) ? $constant['default'] : null, isset($constant['docblock']) ? $constant['docblock'] : null);
+                    $classConstant = new ClassConstant(
+                        $constant['name'],
+                        isset($constant['default']) ? $constant['default'] : null,
+                        isset($constant['docblock']) ? $constant['docblock'] : null
+                    );
                     $classDefinition->addConstant($classConstant);
                 }
             }
@@ -266,7 +284,16 @@ class CompilerFile
              */
             if (isset($definition['methods'])) {
                 foreach ($definition['methods'] as $method) {
-                    $classMethod = new ClassMethod($classDefinition, $method['visibility'], $method['name'], isset($method['parameters']) ? new ClassMethodParameters($method['parameters']) : null, null, isset($method['docblock']) ? $method['docblock'] : null, isset($method['return-type']) ? $method['return-type'] : null, $method);
+                    $classMethod = new ClassMethod(
+                        $classDefinition,
+                        $method['visibility'],
+                        $method['name'],
+                        isset($method['parameters']) ? new ClassMethodParameters($method['parameters']) : null,
+                        null,
+                        isset($method['docblock']) ? $method['docblock'] : null,
+                        isset($method['return-type']) ? $method['return-type'] : null,
+                        $method
+                    );
                     $classDefinition->addMethod($classMethod, $method);
                 }
             }
@@ -285,15 +312,31 @@ class CompilerFile
     protected function _processShorcuts(array $property, ClassDefinition $classDefinition)
     {
         foreach ($property['shortcuts'] as $shortcut) {
-
             if (substr($property['name'], 0, 1) == '_') {
                 $name = substr($property['name'], 1);
             } else {
                 $name = $property['name'];
             }
 
-            switch ($shortcut['name']) {
+            $docBlock = isset($shortcut['docblock']) ? $shortcut['docblock'] : isset($property['docblock']) ? $property['docblock'] : null;
+            $returnsType = array();
 
+            if ($docBlock) {
+                $docBlockParser = new DocblockParser('/' . $docBlock .'/');
+                $docBlockParsed = $docBlockParser->parse();
+
+                if ($annotations = $docBlockParsed->getAnnotationsByType('var')) {
+                    $returnsType = array_map(function ($type) {
+                        return ($type = trim($type)) == 'mixed' ? 'variable' : $type;
+                    }, (array)explode('|', $annotations[0]->getString()));
+                }
+
+                // Clear annotations
+                $docBlockParsed->setAnnotations(array());
+                $docBlock = $docBlockParsed->generate();
+            }
+
+            switch ($shortcut['name']) {
                 case 'get':
                     $classDefinition->addMethod(new ClassMethod(
                         $classDefinition,
@@ -316,8 +359,8 @@ class CompilerFile
                                 )
                             )
                         )),
-                        isset($shortcut['docblock']) ? $shortcut['docblock'] : isset($property['docblock']) ? $property['docblock'] : null,
-                        null,
+                        $docBlock,
+                        $this->createReturnsType($returnsType),
                         $shortcut
                     ), $shortcut);
                     break;
@@ -332,7 +375,7 @@ class CompilerFile
                                 'type' => 'parameter',
                                 'name' => $name,
                                 'const' => 0,
-                                'data-type' => 'variable',
+                                'data-type' => count($returnsType) == 1 ? $returnsType[0] : 'variable',
                                 'mandatory' => 0
                             )
                         )),
@@ -359,7 +402,7 @@ class CompilerFile
                                 )
                             )
                         )),
-                        isset($shortcut['docblock']) ? $shortcut['docblock'] : isset($property['docblock']) ? $property['docblock'] : null,
+                        $docBlock,
                         null,
                         $shortcut
                     ), $shortcut);
@@ -388,8 +431,8 @@ class CompilerFile
                                 )
                             )
                         )),
-                        isset($shortcut['docblock']) ? $shortcut['docblock'] : isset($property['docblock']) ? $property['docblock'] : null,
-                        null,
+                        $docBlock,
+                        $this->createReturnsType(array('string')),
                         $shortcut
                     ), $shortcut);
                     break;
@@ -403,11 +446,12 @@ class CompilerFile
     /**
      * Creates a definition for a class
      *
+     * @param CompilationContext $compilationContext
      * @param string $namespace
      * @param array $topStatement
-     * @param CompilationContext $compilationContext
+     * @param array $docblock
      */
-    public function preCompileClass($namespace, $topStatement, $compilationContext)
+    public function preCompileClass(CompilationContext $compilationContext, $namespace, $topStatement, $docblock)
     {
         $classDefinition = new ClassDefinition($namespace, $topStatement['name']);
         $classDefinition->setIsExternal($this->_external);
@@ -431,8 +475,11 @@ class CompilerFile
             $classDefinition->setIsFinal($topStatement['final']);
         }
 
-        if (isset($topStatement['definition'])) {
+        if (is_array($docblock)) {
+            $classDefinition->setDocBlock($docblock["value"]);
+        }
 
+        if (isset($topStatement['definition'])) {
             $definition = $topStatement['definition'];
 
             if (isset($definition['properties'])) {
@@ -506,6 +553,7 @@ class CompilerFile
     /**
      * Pre-compiles a Zephir file. Generates the IR and perform basic validations
      *
+     * @param Compiler $compiler
      * @throws ParseException
      * @throws CompilerException
      * @throws Exception
@@ -521,11 +569,6 @@ class CompilerFile
         if (isset($ir['type']) && $ir['type'] == 'error') {
             throw new ParseException($ir['message'], $ir);
         }
-
-        /**
-         * Alias Manager
-         */
-        $this->_aliasManager = new AliasManager();
 
         /**
          * Compilation context stores common objects required by compilation entities
@@ -552,13 +595,14 @@ class CompilerFile
          */
         $compilationContext->aliasManager = $this->_aliasManager;
 
+        $compilationContext->backend = $compiler->backend;
+
         /**
          * Traverse the top level statements looking for the namespace
          */
         $namespace = null;
         foreach ($ir as $topStatement) {
             switch ($topStatement['type']) {
-
                 case 'namespace':
                     if ($namespace !== null) {
                         throw new CompilerException("The namespace must be defined just one time", $topStatement);
@@ -573,6 +617,20 @@ class CompilerFile
                 case 'cblock':
                     $this->_headerCBlocks[] = $topStatement['value'];
                     break;
+
+                case 'function':
+                    /* Just do the precompilation of the function */
+                    $functionDefinition = new FunctionDefinition(
+                        $namespace,
+                        $topStatement['name'],
+                        isset($topStatement['parameters']) ? new ClassMethodParameters($topStatement['parameters']) : null,
+                        isset($topStatement['statements']) ? new StatementsBlock($topStatement['statements']) : null,
+                        isset($topStatement['return-type']) ? $topStatement['return-type'] : null,
+                        $topStatement
+                    );
+                    $functionDefinition->preCompile($compilationContext);
+                    $this->addFunction($compiler, $functionDefinition, $topStatement);
+                    break;
             }
         }
 
@@ -580,20 +638,29 @@ class CompilerFile
             throw new CompilerException("A namespace is required", $topStatement);
         }
 
+        /* Set namespace and flag as global, if before namespace declaration */
+        foreach ($this->_functionDefinitions as $funcDef) {
+            if ($funcDef->getNamespace() == null) {
+                $funcDef->setGlobal(true);
+                $funcDef->setNamespace($compiler->getConfig()->get('namespace'));
+            }
+        }
+
         $class = false;
         $interface = false;
+        $lastComment = null;
 
         foreach ($ir as $topStatement) {
             switch ($topStatement['type']) {
-
                 case 'class':
                     if ($class || $interface) {
                         throw new CompilerException("More than one class/interface defined in the same file", $topStatement);
                     }
                     $class = true;
                     $name = $topStatement['name'];
-                    $this->preCompileClass($namespace, $topStatement, $compilationContext);
+                    $this->preCompileClass($compilationContext, $namespace, $topStatement, $lastComment);
                     $this->_originalNode = $topStatement;
+                    $lastComment = null;
                     break;
 
                 case 'interface':
@@ -602,8 +669,9 @@ class CompilerFile
                     }
                     $interface = true;
                     $name = $topStatement['name'];
-                    $this->preCompileInterface($namespace, $topStatement);
+                    $this->preCompileInterface($namespace, $topStatement, $lastComment);
                     $this->_originalNode = $topStatement;
+                    $lastComment = null;
                     break;
 
                 case 'use':
@@ -611,6 +679,10 @@ class CompilerFile
                         throw new CompilerException("Aliasing must be done before declaring any class or interface", $topStatement);
                     }
                     $this->_aliasManager->add($topStatement);
+                    break;
+
+                case 'comment':
+                    $lastComment = $topStatement;
                     break;
             }
         }
@@ -657,7 +729,7 @@ class CompilerFile
                     $extendedDefinition = $compiler->getClassDefinition($extendedClass);
                     $classDefinition->setExtendsClassDefinition($extendedDefinition);
                 } else {
-                    if ($compiler->isInternalClass($extendedClass)) {
+                    if ($compiler->isBundledClass($extendedClass)) {
                         $extendedDefinition = $compiler->getInternalClassDefinition($extendedClass);
                         $classDefinition->setExtendsClassDefinition($extendedDefinition);
                     } else {
@@ -671,7 +743,7 @@ class CompilerFile
                     $extendedDefinition = $compiler->getClassDefinition($extendedClass);
                     $classDefinition->setExtendsClassDefinition($extendedDefinition);
                 } else {
-                    if ($compiler->isInternalInterface($extendedClass)) {
+                    if ($compiler->isBundledInterface($extendedClass)) {
                         $extendedDefinition = $compiler->getInternalClassDefinition($extendedClass);
                         $classDefinition->setExtendsClassDefinition($extendedDefinition);
                     } else {
@@ -691,7 +763,7 @@ class CompilerFile
                 if ($compiler->isInterface($interface)) {
                     $interfaceDefinitions[$interface] = $compiler->getClassDefinition($interface);
                 } else {
-                    if ($compiler->isInternalInterface($interface)) {
+                    if ($compiler->isBundledInterface($interface)) {
                         $interfaceDefinitions[$interface] = $compiler->getInternalClassDefinition($interface);
                     } else {
                         $extendedDefinition = new ClassDefinitionRuntime($extendedClass);
@@ -715,7 +787,6 @@ class CompilerFile
      */
     public function compile(Compiler $compiler, StringsManager $stringsManager)
     {
-
         if (!$this->_ir) {
             throw new CompilerException('IR related to compiled file is missing');
         }
@@ -752,6 +823,8 @@ class CompilerFile
          */
         $compilationContext->stringsManager = $stringsManager;
 
+        $compilationContext->backend = $compiler->backend;
+
         /**
          * Headers manager
          */
@@ -773,10 +846,9 @@ class CompilerFile
 
         $class = false;
         $interface = false;
+
         foreach ($this->_ir as $topStatement) {
-
             switch ($topStatement['type']) {
-
                 case 'class':
                     if ($interface || $class) {
                         throw new CompilerException("More than one class defined in the same file", $topStatement);
@@ -796,9 +868,16 @@ class CompilerFile
                 case 'comment':
                     $this->compileComment($compilationContext, $topStatement);
                     break;
-
             }
         }
+
+        /* ensure functions are handled last */
+        foreach ($this->_functionDefinitions as $funcDef) {
+            $this->compileFunction($compilationContext, $funcDef);
+        }
+
+        /* apply headers */
+        $this->applyClassHeaders($compilationContext);
 
         $classDefinition = $this->_classDefinition;
         if (!$classDefinition) {
@@ -823,7 +902,6 @@ class CompilerFile
         }
 
         if ($codePrinter) {
-
             /**
              * If the file does not exists we create it for the first time
              */
@@ -833,12 +911,11 @@ class CompilerFile
                     file_put_contents($filePathHeader, $compilationContext->headerPrinter->getOutput());
                 }
             } else {
-
                 $fileSystem = $compiler->getFileSystem();
 
                 /**
                  * Use md5 hash to avoid rewrite the file again and again when it hasn't changed
-                 * thus avoiding unnecesary recompilations
+                 * thus avoiding unnecessary recompilations
                  */
                 $output = $codePrinter->getOutput();
                 $hash = $fileSystem->getHashFile('md5', $filePath, true);
@@ -863,6 +940,50 @@ class CompilerFile
         $this->_ir = null;
     }
 
+    public function applyClassHeaders(CompilationContext $compilationContext)
+    {
+        $classDefinition = $this->_classDefinition;
+
+        $separators = str_repeat('../', count(explode('\\', $classDefinition->getCompleteName())) - 1);
+
+        $code  = '' . PHP_EOL;
+        $code .= '#ifdef HAVE_CONFIG_H' . PHP_EOL;
+        $code .= '#include "' . $separators . 'ext_config.h"' . PHP_EOL;
+        $code .= '#endif' . PHP_EOL;
+        $code .= '' . PHP_EOL;
+
+        $code .= '#include <php.h>' . PHP_EOL;
+        $code .= '#include "' . $separators . 'php_ext.h"' . PHP_EOL;
+        $code .= '#include "' . $separators . 'ext.h"' . PHP_EOL;
+        $code .= '' . PHP_EOL;
+
+        if ($classDefinition->getType() == 'class') {
+            $code .= '#include <Zend/zend_operators.h>' . PHP_EOL;
+            $code .= '#include <Zend/zend_exceptions.h>' . PHP_EOL;
+            $code .= '#include <Zend/zend_interfaces.h>' . PHP_EOL;
+        } else {
+            $code .= '#include <Zend/zend_exceptions.h>' . PHP_EOL;
+        }
+        $code .= '' . PHP_EOL;
+
+        $code .= '#include "kernel/main.h"' . PHP_EOL;
+
+        if ($classDefinition->getType() == 'class') {
+            foreach ($compilationContext->headersManager->get() as $header => $one) {
+                $code .= '#include "' . $header . '.h"' . PHP_EOL;
+            }
+        }
+
+        if (count($this->_headerCBlocks) > 0) {
+            $code .= implode($this->_headerCBlocks, PHP_EOL) . PHP_EOL;
+        }
+
+        /**
+         * Prepend the required files to the header
+         */
+        $compilationContext->codePrinter->preOutput($code);
+    }
+
     /**
      * Transform class/interface name to FQN format
      *
@@ -872,5 +993,43 @@ class CompilerFile
     protected function getFullName($name)
     {
         return Utils::getFullName($name, $this->_namespace, $this->_aliasManager);
+    }
+
+    /**
+     *
+     * Returns the path to the source file
+     *
+     * @return type
+     */
+    public function getFilePath()
+    {
+        return $this->_filePath;
+    }
+
+    /**
+     * @param array $types
+     * @return array|null
+     */
+    protected function createReturnsType(Array $types)
+    {
+        if (empty($types)) {
+            return null;
+        }
+
+        $list = array();
+
+        foreach ($types as $type) {
+            $list[] = array(
+                'type' => 'return-type-parameter',
+                'data-type' => $type == 'mixed' ? 'variable' : $type,
+                'mandatory' => false
+            );
+        }
+
+        return array(
+            'type' => 'return-type',
+            'list' => $list,
+            'void' => empty($list),
+        );
     }
 }

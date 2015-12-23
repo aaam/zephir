@@ -40,14 +40,14 @@ class ObjectPropertyAppend
      * Compiles x->y[] = foo
      *
      * @param string $variable
-     * @param Variable $symbolVariable
+     * @param ZephirVariable $symbolVariable
      * @param CompiledExpression $resolvedExpr
-     * @param CompilationContext $compilationContext,
+     * @param CompilationContext $compilationContext
      * @param array $statement
+     * @throws CompilerException
      */
-    public function assign($variable, ZephirVariable $symbolVariable, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, $statement)
+    public function assign($variable, ZephirVariable $symbolVariable, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, array $statement)
     {
-
         if (!$symbolVariable->isInitialized()) {
             throw new CompilerException("Cannot mutate variable '" . $variable . "' because it is not initialized", $statement);
         }
@@ -66,7 +66,6 @@ class ObjectPropertyAppend
          * Check if the variable to update is defined
          */
         if ($symbolVariable->getRealName() == 'this') {
-
             $classDefinition = $compilationContext->classDefinition;
             if (!$classDefinition->hasProperty($property)) {
                 throw new CompilerException("Class '" . $classDefinition->getCompleteName() . "' does not have a property called: '" . $property . "'", $statement);
@@ -74,18 +73,15 @@ class ObjectPropertyAppend
 
             $propertyDefinition = $classDefinition->getProperty($property);
         } else {
-
             /**
              * If we know the class related to a variable we could check if the property
              * is defined on that class
              */
             if ($symbolVariable->hasAnyDynamicType('object')) {
-
                 $classType = current($symbolVariable->getClassTypes());
                 $compiler = $compilationContext->compiler;
 
                 if ($compiler->isClass($classType)) {
-
                     $classDefinition = $compiler->getClassDefinition($classType);
                     if (!$classDefinition) {
                         throw new CompilerException("Cannot locate class definition for class: " . $classType, $statement);
@@ -99,19 +95,26 @@ class ObjectPropertyAppend
         }
 
         switch ($resolvedExpr->getType()) {
-
             case 'null':
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ZEPHIR_GLOBAL(global_null) TSRMLS_CC);');
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, 'null', $compilationContext);
                 break;
 
             case 'bool':
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), (' . $resolvedExpr->getBooleanCode() . ') ? ZEPHIR_GLOBAL(global_true) : ZEPHIR_GLOBAL(global_false) TSRMLS_CC);');
+                $codePrinter->output('if (' . $resolvedExpr->getBooleanCode() . ') {');
+                $codePrinter->increaseLevel();
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, 'true', $compilationContext);
+                $codePrinter->decreaseLevel();
+                $codePrinter->output('} else {');
+                $codePrinter->increaseLevel();
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, 'false', $compilationContext);
+                $codePrinter->decreaseLevel();
+                $codePrinter->output('}');
                 break;
 
             case 'char':
                 $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                $codePrinter->output('ZVAL_LONG(' . $tempVariable->getName() . ', \'' . $resolvedExpr->getCode() . '\');');
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                $compilationContext->backend->assignLong($tempVariable, '\'' . $resolvedExpr->getCode() . '\'', $compilationContext);
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                 if ($tempVariable->isTemporal()) {
                     $tempVariable->setIdle(true);
                 }
@@ -121,8 +124,8 @@ class ObjectPropertyAppend
             case 'long':
             case 'uint':
                 $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                $codePrinter->output('ZVAL_LONG(' . $tempVariable->getName() . ', ' . $resolvedExpr->getCode() . ');');
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                $compilationContext->backend->assignLong($tempVariable, $resolvedExpr->getCode(), $compilationContext);
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                 if ($tempVariable->isTemporal()) {
                     $tempVariable->setIdle(true);
                 }
@@ -130,8 +133,8 @@ class ObjectPropertyAppend
 
             case 'double':
                 $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                $codePrinter->output('ZVAL_DOUBLE(' . $tempVariable->getName() . ', ' . $resolvedExpr->getCode() . ');');
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                $compilationContext->backend->assignDouble($tempVariable, $resolvedExpr->getCode(), $compilationContext);
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                 if ($tempVariable->isTemporal()) {
                     $tempVariable->setIdle(true);
                 }
@@ -139,8 +142,8 @@ class ObjectPropertyAppend
 
             case 'string':
                 $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                $codePrinter->output('ZVAL_STRING(' . $tempVariable->getName() . ', "' . $resolvedExpr->getCode() . '", 1);');
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                $compilationContext->backend->assignString($tempVariable, $resolvedExpr->getCode(), $compilationContext);
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                 if ($tempVariable->isTemporal()) {
                     $tempVariable->setIdle(true);
                 }
@@ -148,20 +151,19 @@ class ObjectPropertyAppend
 
             case 'array':
                 $variableExpr = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $statement);
-                $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $variableExpr->getName() . ' TSRMLS_CC);');
+                $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $variableExpr, $compilationContext);
                 break;
 
             case 'variable':
                 $variableExpr = $compilationContext->symbolTable->getVariableForRead($resolvedExpr->getCode(), $compilationContext, $statement);
                 switch ($variableExpr->getType()) {
-
                     case 'int':
                     case 'long':
                     case 'uint':
                     case 'char':
                         $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                        $codePrinter->output('ZVAL_LONG(' . $tempVariable->getName() . ', ' . $variableExpr->getName() . ');');
-                        $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                        $compilationContext->backend->assignLong($tempVariable, $variableExpr, $compilationContext);
+                        $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                         if ($tempVariable->isTemporal()) {
                             $tempVariable->setIdle(true);
                         }
@@ -169,8 +171,8 @@ class ObjectPropertyAppend
 
                     case 'double':
                         $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                        $codePrinter->output('ZVAL_DOUBLE(' . $tempVariable->getName() . ', ' . $variableExpr->getName() . ');');
-                        $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                        $compilationContext->backend->assignDouble($tempVariable, $variableExpr, $compilationContext);
+                        $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                         if ($tempVariable->isTemporal()) {
                             $tempVariable->setIdle(true);
                         }
@@ -178,8 +180,8 @@ class ObjectPropertyAppend
 
                     case 'bool':
                         $tempVariable = $compilationContext->symbolTable->getTempNonTrackedVariable('variable', $compilationContext, true);
-                        $codePrinter->output('ZVAL_BOOL(' . $tempVariable->getName() . ', ' . $variableExpr->getName() . ');');
-                        $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $tempVariable->getName() . ' TSRMLS_CC);');
+                        $compilationContext->backend->assignBool($tempVariable, $variableExpr, $compilationContext);
+                        $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $tempVariable, $compilationContext);
                         if ($tempVariable->isTemporal()) {
                             $tempVariable->setIdle(true);
                         }
@@ -190,7 +192,7 @@ class ObjectPropertyAppend
                     case 'array':
                     case 'resource':
                     case 'object':
-                        $codePrinter->output('zephir_update_property_array_append(' . $symbolVariable->getName() . ', SL("' . $property . '"), ' . $variableExpr->getName() . ' TSRMLS_CC);');
+                        $compilationContext->backend->assignArrayProperty($symbolVariable, $property, null, $variableExpr, $compilationContext);
                         if ($variableExpr->isTemporal()) {
                             $variableExpr->setIdle(true);
                         }

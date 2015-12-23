@@ -32,16 +32,14 @@ use Zephir\CompiledExpression;
  */
 class CloneOperator extends BaseOperator
 {
-
     /**
-     *
      * @param array $expression
-     * @param \CompilationContext $compilationContext
-     * @return \CompiledExpression
+     * @param CompilationContext $compilationContext
+     * @return CompiledExpression
+     * @throws CompilerException
      */
-    public function compile($expression, CompilationContext $compilationContext)
+    public function compile(array $expression, CompilationContext $compilationContext)
     {
-
         $compilationContext->headersManager->add('kernel/object');
 
         $exprVariable = new Expression($expression['left']);
@@ -75,7 +73,10 @@ class CloneOperator extends BaseOperator
         $symbolVariable->setDynamicTypes($clonedVariable->getDynamicTypes());
         $symbolVariable->setClassTypes($clonedVariable->getClassTypes());
 
-        $compilationContext->codePrinter->output('if (zephir_clone(' . $symbolVariable->getName() . ', ' . $clonedVariable->getName() . ' TSRMLS_CC) == FAILURE) {');
+        $symbol = $compilationContext->backend->getVariableCode($symbolVariable);
+        $clonedSymbol = $compilationContext->backend->getVariableCode($clonedVariable);
+
+        $compilationContext->codePrinter->output('if (zephir_clone(' . $symbol . ', ' . $clonedSymbol . ' TSRMLS_CC) == FAILURE) {');
         $compilationContext->codePrinter->output("\t" . 'RETURN_MM();');
         $compilationContext->codePrinter->output('}');
 

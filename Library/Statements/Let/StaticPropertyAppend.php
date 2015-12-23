@@ -56,7 +56,8 @@ class StaticPropertyAppend extends ArrayIndex
          */
         $variableExpr = $this->_getResolvedArrayItem($resolvedExpr, $compilationContext);
 
-        $codePrinter->output('zephir_update_static_property_array_multi_ce(' . $classEntry .', SL("' . $property . '"), &' . $variableExpr->getName() . ' TSRMLS_CC, SL("a"), 1);');
+        $offsetExprs[] = 'a';
+        $compilationContext->backend->assignStaticPropertyArrayMulti($classEntry, $variableExpr, $property, $offsetExprs, $compilationContext);
 
         if ($variableExpr->isTemporal()) {
             $variableExpr->setIdle(true);
@@ -77,14 +78,13 @@ class StaticPropertyAppend extends ArrayIndex
      */
     public function assignStatic($className, $property, CompiledExpression $resolvedExpr, CompilationContext $compilationContext, $statement)
     {
-
         $compiler = $compilationContext->compiler;
         if (!in_array($className, array('self', 'static', 'parent'))) {
             $className = $compilationContext->getFullName($className);
             if ($compiler->isClass($className)) {
                 $classDefinition = $compiler->getClassDefinition($className);
             } else {
-                if ($compiler->isInternalClass($className)) {
+                if ($compiler->isBundledClass($className)) {
                     $classDefinition = $compiler->getInternalClassDefinition($className);
                 } else {
                     throw new CompilerException("Cannot locate class '" . $className . "'", $statement);

@@ -115,7 +115,6 @@ class StatementsBlock
         }
 
         foreach ($statements as $statement) {
-
             /**
              * Generate GDB hints
              */
@@ -132,7 +131,6 @@ class StatementsBlock
              */
             if ($this->unreachable === true) {
                 switch ($statement['type']) {
-
                     case 'echo':
                         $compilationContext->logger->warning('Unreachable code', "unreachable-code", $statement['expressions'][0]);
                         break;
@@ -165,7 +163,6 @@ class StatementsBlock
             }
 
             switch ($statement['type']) {
-
                 case 'let':
                     $letStatement = new LetStatement($statement);
                     $letStatement->compile($compilationContext);
@@ -295,6 +292,7 @@ class StatementsBlock
                     $compilationContext->codePrinter->output($statement['value']);
                     break;
 
+                case 'comment':
                 case 'empty':
                     break;
 

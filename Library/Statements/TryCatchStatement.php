@@ -21,7 +21,8 @@ namespace Zephir\Statements;
 
 use Zephir\CompilationContext;
 use Zephir\CompilerException;
-use Zephir\Optimizers\EvalExpression;
+use Zephir\Expression\Builder\BuilderFactory;
+use Zephir\Expression\Builder\Operators\BinaryOperator;
 use Zephir\StatementsBlock;
 use Zephir\Builder\StatementsBlockBuilder;
 use Zephir\Builder\Operators\BinaryOperatorBuilder;
@@ -44,9 +45,10 @@ class TryCatchStatement extends StatementAbstract
         $codePrinter = $compilationContext->codePrinter;
 
         $compilationContext->insideTryCatch++;
+        $currentTryCatch = ++$compilationContext->currentTryCatch;
 
         $codePrinter->outputBlankLine();
-        $codePrinter->output('/* try_start_' . $compilationContext->insideTryCatch . ': */');
+        $codePrinter->output('/* try_start_' . $currentTryCatch . ': */');
         $codePrinter->outputBlankLine();
 
         if (isset($this->_statement['statements'])) {
@@ -55,7 +57,7 @@ class TryCatchStatement extends StatementAbstract
         }
 
         $codePrinter->outputBlankLine();
-        $codePrinter->output('try_end_' . $compilationContext->insideTryCatch . ':');
+        $codePrinter->output('try_end_' . $currentTryCatch . ':');
 
         /**
          * If 'try' is the latest statement add a 'dummy' statement to avoid compilation errors
@@ -65,15 +67,15 @@ class TryCatchStatement extends StatementAbstract
         $compilationContext->insideTryCatch--;
 
         if (isset($this->_statement['catches'])) {
-
             /**
              * Check if there was an exception
              */
             $codePrinter->output('if (EG(exception)) {');
             $codePrinter->increaseLevel();
 
-            foreach ($this->_statement['catches'] as $catch) {
+            $exprBuilder = BuilderFactory::getInstance();
 
+            foreach ($this->_statement['catches'] as $catch) {
                 if (isset($catch['variable'])) {
                     $variable = $compilationContext->symbolTable->getVariableForWrite($catch['variable']['value'], $compilationContext, $catch['variable']);
                     if ($variable->getType() != 'variable') {
@@ -83,7 +85,7 @@ class TryCatchStatement extends StatementAbstract
                     $variable = $compilationContext->symbolTable->getTempVariableForWrite('variable', $compilationContext, $compilationContext);
                 }
 
-                $codePrinter->output('ZEPHIR_CPY_WRT(' . $variable->getName() . ', EG(exception));');
+                $compilationContext->backend->copyOnWrite($variable, 'EG(exception)', $compilationContext);
 
                 /**
                  * @TODO, use a builder here
@@ -95,32 +97,30 @@ class TryCatchStatement extends StatementAbstract
                  * Check if any of the classes in the catch block match the thrown exception
                  */
                 foreach ($catch['classes'] as $class) {
-
-                    $ifCheck = new IfStatementBuilder(
-                        new BinaryOperatorBuilder(
-                            'instanceof',
-                            new VariableBuilder($variable->getName()),
-                            new VariableBuilder($class['value'])
-                        ),
-                        new StatementsBlockBuilder(array_merge(
-                            array(array('type' => 'cblock', 'value' => 'zend_clear_exception(TSRMLS_C);')),
+                    $ifCheck = $exprBuilder->statements()->ifX()
+                        ->setCondition(
+                            $exprBuilder->operators()->binary(
+                                BinaryOperator::OPERATOR_INSTANCEOF,
+                                $exprBuilder->variable($variable->getName()),
+                                $exprBuilder->variable($class['value'])
+                            )
+                        )
+                        ->setStatements($exprBuilder->statements()->block(array_merge(
+                            array($exprBuilder->statements()->rawC('zend_clear_exception(TSRMLS_C);')),
                             isset($catch['statements']) ? $catch['statements'] : array()
-                        ), true)
-                    );
+                        )));
 
-                    $ifStatement = new IfStatement($ifCheck->get());
+                    $ifStatement = new IfStatement($ifCheck->build());
                     $ifStatement->compile($compilationContext);
                 }
 
                 if ($variable->isTemporal()) {
                     $variable->setIdle(true);
                 }
-
             }
 
             $codePrinter->decreaseLevel();
             $codePrinter->output('}');
-
         } else {
             $codePrinter->output('zend_clear_exception(TSRMLS_C);');
         }

@@ -59,10 +59,6 @@ class CreateInstanceOptimizer extends OptimizerAbstract
             throw new CompilerException("Returned values by functions can only be assigned to variant variables", $expression);
         }
 
-        if ($call->mustInitSymbolVariable()) {
-            $symbolVariable->initVariant($context);
-        }
-
         /**
          * Add the last call status to the current symbol table
          */
@@ -74,12 +70,18 @@ class CreateInstanceOptimizer extends OptimizerAbstract
 
         $resolvedParams = $call->getReadOnlyResolvedParams($expression['parameters'], $context, $expression);
 
+        if ($call->mustInitSymbolVariable()) {
+            $symbolVariable->initVariant($context);
+        }
          /**
          * Add the last call status to the current symbol table
          */
         $call->addCallStatusFlag($context);
 
-        $context->codePrinter->output('ZEPHIR_LAST_CALL_STATUS = zephir_create_instance(' . $symbolVariable->getName() . ', ' . $resolvedParams[0] . ' TSRMLS_CC);');
+        $symbol = $context->backend->getVariableCode($symbolVariable);
+        $context->codePrinter->output('ZEPHIR_LAST_CALL_STATUS = zephir_create_instance(' . $symbol . ', ' . $resolvedParams[0] . ' TSRMLS_CC);');
+
+        $call->checkTempParameters($context);
         $call->addCallStatusOrJump($context);
 
         return new CompiledExpression('variable', $symbolVariable->getRealName(), $expression);

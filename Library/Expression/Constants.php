@@ -161,7 +161,6 @@ class Constants
             $type = strtolower(gettype($constantName));
 
             switch ($type) {
-
                 case 'integer':
                     return new LiteralCompiledExpression('int', $constantName, $expression);
 
@@ -180,20 +179,35 @@ class Constants
         }
 
         if (in_array($constantName, $this->magickConstants)) {
-
             switch ($constantName) {
-
                 case '__CLASS__':
-                    return new CompiledExpression('string', $compilationContext->classDefinition->getName(), $expression);
-
+                    return new CompiledExpression(
+                        'string',
+                        Utils::addSlashes($compilationContext->classDefinition->getCompleteName(), true, Types::STRING),
+                        $expression
+                    );
+                    //no break
                 case '__NAMESPACE__':
-                    return new CompiledExpression('string', $compilationContext->classDefinition->getCNamespace(), $expression);
-
+                    return new CompiledExpression(
+                        'string',
+                        Utils::addSlashes($compilationContext->classDefinition->getNamespace(), true, Types::STRING),
+                        $expression
+                    );
+                    //no break
                 case '__METHOD__':
-                    return new CompiledExpression('string', $compilationContext->classDefinition->getName() . ':' . $compilationContext->currentMethod->getName(), $expression);
-
+                    return new CompiledExpression(
+                        'string',
+                        $compilationContext->classDefinition->getName() . ':' . $compilationContext->currentMethod->getName(),
+                        $expression
+                    );
+                    //no break
                 case '__FUNCTION__':
-                    return new CompiledExpression('string', $compilationContext->currentMethod->getName(), $expression);
+                    return new CompiledExpression(
+                        'string',
+                        $compilationContext->currentMethod->getName(),
+                        $expression
+                    );
+                    //no break
             }
 
             $compilationContext->logger->warning("Magic constant '" . $constantName . "' is not supported", 'not-supported-magic-constant', $expression);
@@ -214,7 +228,7 @@ class Constants
             throw new CompilerException('Cannot use variable: ' . $symbolVariable->getType() . ' to assign property value', $expression);
         }
 
-        $compilationContext->codePrinter->output('ZEPHIR_GET_CONSTANT(' . $symbolVariable->getName() . ', "' . $expression['value'] . '");');
+        $compilationContext->codePrinter->output('ZEPHIR_GET_CONSTANT(' . $compilationContext->backend->getVariableCode($symbolVariable) . ', "' . $expression['value'] . '");');
         return new CompiledExpression('variable', $symbolVariable->getName(), $expression);
     }
 }

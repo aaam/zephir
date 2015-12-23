@@ -19,10 +19,12 @@
 
 namespace Zephir\Stubs;
 
+use Zephir\AliasManager;
 use Zephir\ClassMethod;
 
 /**
  * Stubs Generator
+ * @todo: Merge class with documentation generator
  */
 class MethodDocBlock extends DocBlock
 {
@@ -32,18 +34,28 @@ class MethodDocBlock extends DocBlock
 
     private $shortcutName = '';
 
-    public function __construct(ClassMethod $method, $indent = 4)
+    /**
+     * @var AliasManager
+     */
+    private $aliasManager;
+
+    public function __construct(ClassMethod $method, AliasManager $aliasManager, $indent = '    ')
     {
         parent::__construct($method->getDocBlock(), $indent);
+
+        $this->aliasManager = $aliasManager;
         $this->shortcutName = $method->isShortcut() ? $method->getShortcutName() : '';
         $this->parseMethodParameters($method);
         $this->parseLines();
+
         if (!$this->return) {
             $this->parseMethodReturnType($method);
         }
+
         if ($this->parameters) {
             $this->appendParametersLines();
         }
+
         if ($this->return) {
             $this->appendReturnLine();
         }
@@ -53,17 +65,44 @@ class MethodDocBlock extends DocBlock
     {
         $return = array();
         $returnTypes = $method->getReturnTypes();
+
+
         if ($returnTypes) {
             foreach ($returnTypes as $type) {
                 if (isset($type['data-type'])) {
-                    $return[] = $type['data-type'];
+                    $return[] = $type['data-type'] == 'variable' ? 'mixed' : $type['data-type'];
                 }
             }
         }
         $returnClassTypes = $method->getReturnClassTypes();
         if ($returnClassTypes) {
+            foreach ($returnClassTypes as $key => $returnClassType) {
+                if ($this->aliasManager->isAlias($returnClassType)) {
+                    $returnClassTypes[$key] = "\\" . $this->aliasManager->getAlias($returnClassType);
+                }
+            }
+
             $return = array_merge($return, $returnClassTypes);
         }
+
+        //@TODO: refactoring
+        if (($returnClassTypes = $method->getReturnTypesRaw()) && isset($returnClassTypes['list'])) {
+            foreach ($returnClassTypes['list'] as $returnType) {
+                if (empty($returnType['cast']) || !$returnType['collection']) {
+                    continue;
+                }
+
+                $key  = $returnType['cast']['value'];
+                $type = $key;
+
+                if ($this->aliasManager->isAlias($type)) {
+                    $returnClassTypes[$key] = "\\" . $this->aliasManager->getAlias($type);
+                }
+
+                $return[$key] = $type . '[]';
+            }
+        }
+
         if ($return) {
             $this->return = array(join('|', $return), '');
         }
@@ -116,6 +155,7 @@ class MethodDocBlock extends DocBlock
     private function appendReturnLine()
     {
         list($type, $description) = $this->return;
+
         $this->lines[] = '@return ' . $type . ' ' . $description;
     }
 
@@ -125,6 +165,7 @@ class MethodDocBlock extends DocBlock
         if (!$parameters) {
             return;
         }
+
         foreach ($method->getParameters() as $parameter) {
             if (isset($parameter['data-type'])) {
                 if ($parameter['data-type'] == 'variable') {

@@ -46,7 +46,6 @@ class Decr
      */
     public function assign($variable, ZephirVariable $symbolVariable, CompilationContext $compilationContext, $statement)
     {
-
         if (!$symbolVariable->isInitialized()) {
             throw new CompilerException("Cannot mutate variable '" . $variable . "' because it is not initialized", $statement);
         }
@@ -58,7 +57,6 @@ class Decr
         $codePrinter = $compilationContext->codePrinter;
 
         switch ($symbolVariable->getType()) {
-
             case 'int':
             case 'uint':
             case 'long':
@@ -70,12 +68,11 @@ class Decr
                 break;
 
             case 'variable':
-
                 /**
                  * Variable is probably not initialized here
                  */
                 if ($symbolVariable->hasAnyDynamicType('unknown')) {
-                    throw new CompilerException("Attempt to increment uninitialized variable", $statement);
+                    throw new CompilerException("Attempt to decrement uninitialized variable", $statement);
                 }
 
                 /**
@@ -86,12 +83,10 @@ class Decr
                 }
 
                 $compilationContext->headersManager->add('kernel/operators');
-                if ($symbolVariable->isLocalOnly()) {
-                    $codePrinter->output('zephir_decrement(&' . $variable . ');');
-                } else {
+                if (!$symbolVariable->isLocalOnly()) {
                     $symbolVariable->separate($compilationContext);
-                    $codePrinter->output('zephir_decrement(' . $variable . ');');
                 }
+                $codePrinter->output('zephir_decrement(' . $compilationContext->backend->getVariableCode($symbolVariable) . ');');
                 break;
 
             default:
